@@ -66,7 +66,7 @@ namespace GomokuNN.Sources
         private int _agent1Won = 0;
         private int _agent2Won = 0;
 
-        private static int network_latest_version = 34;
+        private static int network_latest_version = 38;
         private int _latestNetworkGeneration = network_latest_version;
         private int _agent1NetworkGeneration = network_latest_version;
         private int _agent2NetworkGeneration = network_latest_version;
