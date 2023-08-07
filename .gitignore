@@ -1,9 +1,9 @@
-obj/
-bin/
-.vscode/
-.vs/
-Keras/obj/
-Keras/bin/
-Tensorflow/obj/
-Tensorflow/bin/
+obj/*
+bin/*
+.vscode/*
+.vs/*
+Keras/obj/*
+Keras/bin/*
+Tensorflow/obj/*
+Tensorflow/bin/*
 
