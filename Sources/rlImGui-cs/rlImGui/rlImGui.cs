@@ -133,10 +133,17 @@ namespace rlImGui_cs
             }
             else
             {
-                io.DisplaySize = new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
+                // Console.WriteLine("DPI: " + Raylib.GetWindowScaleDPI());
+                // Console.WriteLine("DPI: " + Raylib.GetScreenWidth());
+                // Console.WriteLine("DPI: " + Raylib.GetScreenHeight());
+                // Console.WriteLine("DPI: " + Raylib.GetMonitorWidth(0));
+                // Console.WriteLine("DPI: " + Raylib.GetMonitorHeight(0));
+                // Console.WriteLine("DPI: " + Raylib.GetMonitorPhysicalWidth(0));
+                // Console.WriteLine("DPI: " + Raylib.GetMonitorPhysicalHeight(0));
+                io.DisplaySize = new Vector2(Raylib.GetScreenWidth() * Raylib.GetWindowScaleDPI().X, Raylib.GetScreenHeight() * Raylib.GetWindowScaleDPI().Y);
             }
             
-            io.DisplayFramebufferScale = new Vector2(1, 1);
+            io.DisplayFramebufferScale = new Vector2(Raylib.GetWindowScaleDPI().X, Raylib.GetWindowScaleDPI().Y);
             io.DeltaTime = Raylib.GetFrameTime();
 
             io.KeyCtrl = Raylib.IsKeyDown(KeyboardKey.KEY_RIGHT_CONTROL) || Raylib.IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL);
@@ -219,7 +226,7 @@ namespace rlImGui_cs
         private static void EnableScissor(float x, float y, float width, float height)
         {
             Rlgl.rlEnableScissorTest();
-            Rlgl.rlScissor((int)x, Raylib.GetScreenHeight() - (int)(y + height), (int)width, (int)height);
+            Rlgl.rlScissor((int)x, (int)(Raylib.GetScreenHeight() * Raylib.GetWindowScaleDPI().Y) - (int)(y + height), (int)width, (int)height);
         }
 
         private static void TriangleVert(ImDrawVertPtr idx_vert)
@@ -283,7 +290,7 @@ namespace rlImGui_cs
                 {
                     var cmd = commandList.CmdBuffer[cmdIndex];
 
-                    EnableScissor(cmd.ClipRect.X - data.DisplayPos.X, cmd.ClipRect.Y - data.DisplayPos.Y, cmd.ClipRect.Z - (cmd.ClipRect.X - data.DisplayPos.X), cmd.ClipRect.W - (cmd.ClipRect.Y - data.DisplayPos.Y));
+                    EnableScissor(cmd.ClipRect.X - data.DisplayPos.X, cmd.ClipRect.Y - data.DisplayPos.Y, cmd.ClipRect.Z * Raylib.GetWindowScaleDPI().X - (cmd.ClipRect.X - data.DisplayPos.X), cmd.ClipRect.W * Raylib.GetWindowScaleDPI().Y - (cmd.ClipRect.Y - data.DisplayPos.Y));
                     if (cmd.UserCallback != IntPtr.Zero)
                     {
                         Callback cb = Marshal.GetDelegateForFunctionPointer<Callback>(cmd.UserCallback);

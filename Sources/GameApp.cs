@@ -101,19 +101,19 @@ namespace GomokuNN.Sources
             //Environment.SetEnvironmentVariable("PATH", envPythonHome + ";" + envPythonLib + ";" + Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine), EnvironmentVariableTarget.Process);
             //Environment.SetEnvironmentVariable("PYTHONPATH", envPythonLib, EnvironmentVariableTarget.User);
 
-            //Runtime.PythonDLL = @"C:\Python38\python38.dll";
+            // Runtime.PythonDLL = @"C:\Python38\python38.dll";
             //PythonEngine.PythonHome = envPythonHome;
             //PythonEngine.PythonPath = Environment.GetEnvironmentVariable("PYTHONPATH");
 
             string pythonPath1 = @"C:\Python38\";
             string pythonPath2 = @"C:\Python38\site-packages\";
 
-            Runtime.PythonDLL = @"C:\Python38\python38.dll";
+            Runtime.PythonDLL = @"/usr/local/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/libpython3.11.dylib";
 
             //Environment.SetEnvironmentVariable("PATH", pythonPath1, EnvironmentVariableTarget.Process);
             //Environment.SetEnvironmentVariable("PYTHONHOME", pythonPath1, EnvironmentVariableTarget.Process);
             //Environment.SetEnvironmentVariable("PYTHONPATH", pythonPath2, EnvironmentVariableTarget.Process);
-            //Environment.SetEnvironmentVariable("PYTHONNET_PYDLL", @"/-/opt/anaconda3/lib/libpython3.9.dylib");
+            Environment.SetEnvironmentVariable("PYTHONNET_PYDLL", @"/usr/local/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/libpython3.11.dylib");
         }
 
         private static void SetupModel()
