@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>Keras.NET</id>
+    <version>3.8.7.1</version>
+    <authors>SciSharp Team</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="file">LICENSE</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <projectUrl>https://scisharp.github.io/Keras.NET/</projectUrl>
+    <iconUrl>https://avatars3.githubusercontent.com/u/44989469?s=128&amp;v=4</iconUrl>
+    <description>C# bindings for Keras on Win64 - Keras.NET is a high-level neural networks API, capable of running on top of TensorFlow, CNTK, or Theano.</description>
+    <tags>keras, deep learning, neural network, tensorflow, cntk, plaimml</tags>
+    <repository type="git" url="https://github.com/SciSharp/Keras.NET" />
+    <dependencies>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="Tensorflow" version="1.0.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="D:\Projects\Keras.NET\Keras\bin\Debug\netstandard2.0\Keras.dll" target="lib\netstandard2.0\Keras.dll" />
+    <file src="D:\Projects\Keras.NET\LICENSE" target="LICENSE" />
+  </files>
+</package>

@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Keras.NET</PackageId>
+    <Version>3.8.7.12</Version>
+    <Authors>SciSharp Team</Authors>
+    <Product>Keras.NET</Product>
+    <Description>C# bindings for Keras on Win64 - Keras.NET is a high-level neural networks API, capable of running on top of TensorFlow, CNTK, or Theano. </Description>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://scisharp.github.io/Keras.NET/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/Keras.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=128&amp;v=4</PackageIconUrl>
+    <PackageTags>keras, deep learning, neural network, tensorflow, cntk, plaimml</PackageTags>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <AssemblyName>Keras</AssemblyName>
+    <RootNamespace>Keras</RootNamespace>
+    <Configurations>Debug;Release;Py3.11_WIN;Py3.11_OSX;Py3.11_Mono;</Configurations>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Platforms>AnyCPU;x64</Platforms>
+    <Company>SciSharp</Company>
+    <UserSecretsId>98f5a336-4480-4ad3-9d6c-fed0e82a33a3</UserSecretsId>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="tf\" />
+    <Folder Include="Properties\"></Folder>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tensorflow\Tensorflow.csproj" />
+  </ItemGroup>
+
+</Project>
