@@ -230,7 +230,7 @@ namespace GomokuNN.Sources
 
                 var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
-                var result = _modell.PredictMultipleOutputs(input, verbose: 0);
+                var result = _model.PredictMultipleOutputs(input, verbose: 0);
                 var policyArray = result[0].GetData<float>();
                 var resultArray = result[1].GetData<float>();
                 score = resultArray[0];
