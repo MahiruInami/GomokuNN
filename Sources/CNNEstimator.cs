@@ -227,6 +227,11 @@ namespace GomokuNN.Sources
                 }
 
                 inputData[boardOffset * 2 + state.GetPositionHash(selectedNode.MovePosition.X, selectedNode.MovePosition.Y)] = 1;
+<<<<<<< HEAD
+=======
+
+                var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
+>>>>>>> 47280a2 (network update)
 
                 var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
