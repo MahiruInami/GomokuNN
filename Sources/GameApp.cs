@@ -856,8 +856,8 @@ namespace GomokuNN.Sources
 
                 ImGui.SliderInt("Epoch count", ref _trainingEpochCount, 1, 100);
 
-                if (_isTraining && ImGui.SliderInt("Agent1 playouts", ref _agent1PlayoutsBeforeMoveSelection, 1, 10000)) { }
-                if (_isTraining && ImGui.SliderInt("Agent2 playouts", ref _agent2PlayoutsBeforeMoveSelection, 1, 10000)) { }
+                if (_isTraining && ImGui.SliderInt("Agent1 playouts", ref _agent1PlayoutsBeforeMoveSelection, 100, 5000)) { }
+                if (_isTraining && ImGui.SliderInt("Agent2 playouts", ref _agent2PlayoutsBeforeMoveSelection, 100, 5000)) { }
 
                 if (_isTraining && ImGui.Button("Stop training"))
                 {

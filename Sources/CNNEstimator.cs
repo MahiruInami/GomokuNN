@@ -22,7 +22,7 @@ namespace GomokuNN.Sources
         int _estimatorColor = 0;
         Random _rndGenerator = new Random();
 
-        Keras.Models.BaseModel _modell;
+        Keras.Models.BaseModel _model;
 
         public CNNEstimator(bool isTraining)
         {
@@ -71,7 +71,7 @@ namespace GomokuNN.Sources
 
             var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
-            var result = _modell.PredictMultipleOutputs(input, verbose: 0);
+            var result = _model.PredictMultipleOutputs(input, verbose: 0);
             var policyArray = result[0].GetData<float>();
 
             int index = 0;
@@ -95,7 +95,7 @@ namespace GomokuNN.Sources
 
         public void LoadModel(string policyModelPath)
         {
-            _modell = Keras.Models.Model.LoadModel(policyModelPath);
+            _model = Keras.Models.Model.LoadModel(policyModelPath);
             //_valueModel = Keras.Models.Model.LoadModel(valueModelPath);
         }
 
@@ -227,11 +227,6 @@ namespace GomokuNN.Sources
                 }
 
                 inputData[boardOffset * 2 + state.GetPositionHash(selectedNode.MovePosition.X, selectedNode.MovePosition.Y)] = 1;
-<<<<<<< HEAD
-=======
-
-                var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
->>>>>>> 47280a2 (network update)
 
                 var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
