@@ -14,24 +14,19 @@ namespace GomokuNN.Sources
         public float PolicyProbability { get; set; }
 
         public bool IsGameEndPosition { get; set; }
-        public bool IsEndPoint { get { return Leafs == null; } }
+        public bool IsEndPoint { get { return Leafs.Count == 0; } }
 
         public Constants.MovePosition MovePosition { get; set; }
         public int MoveColor { get; set; }
 
         public MCTSTreeNode Parent { get; set; }
 
-        public MCTSTreeNode[]? Leafs = null;
-
-        public MCTSTreeNode(MCTSTreeNode parent, int leafsCount)
-        {
-            this.Parent = parent;
-            Leafs = new MCTSTreeNode[leafsCount];
-        }
+        public List<MCTSTreeNode> Leafs;
 
         public MCTSTreeNode(MCTSTreeNode parent)
         {
             this.Parent = parent;
+            Leafs = new List<MCTSTreeNode>();
         }
     }
 }

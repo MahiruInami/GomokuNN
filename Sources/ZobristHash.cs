@@ -24,5 +24,10 @@ namespace GomokuNN.Sources
                 }
             }
         }
+
+        public static long GetCellZobristHash(int size, int x, int y, int color)
+        {
+            return _hashTable[y * size + x, color];
+        }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using ImGuiNET;
+using Keras.Layers;
 using Numpy;
 using System;
 using System.Collections.Generic;
@@ -41,21 +42,21 @@ namespace GomokuNN.Sources
                 }
             }
 
-            _policy = new IncrementalMovesPolicy();
+            _policy = new IncrementalMovesPolicy(Constants.CNN_MOVE_POLICY_EXPANSION);
             _policy.Init(_state);
 
             _estimatorColor = turnColor;
 
             var availableMoves = _policy.GetHashedPositions();
-            _root = new MCTSTreeNode(null, availableMoves.Count)
+            _root = new MCTSTreeNode(null)
             {
                 MovePosition = new Constants.MovePosition(),
                 MoveColor = Constants.NULL_COLOR
             };
 
             const int movesHistory = 1;
-            int[] inputData = new int[_state.GetBoardSize() * _state.GetBoardSize() * movesHistory * 3];
-            int secondPlayerOffset = _state.GetBoardSize() * _state.GetBoardSize();
+            int[] inputData = new int[_state.GetBoardSize() * _state.GetBoardSize() * movesHistory * 4];
+            int boardOffset = _state.GetBoardSize() * _state.GetBoardSize();
             int dataOffset = 0;
 
             var currentNode = _root;
@@ -63,11 +64,12 @@ namespace GomokuNN.Sources
             {
                 var value = _state.GetRawCellState(i);
                 inputData[i + dataOffset] = value == Constants.CROSS_COLOR ? 1 : 0;
-                inputData[i + secondPlayerOffset + dataOffset] = value == Constants.ZERO_COLOR ? 1 : 0;
+                inputData[i + boardOffset + dataOffset] = value == Constants.ZERO_COLOR ? 1 : 0;
+
+                inputData[i + boardOffset * 3 + dataOffset] = turnColor == Constants.CROSS_COLOR ? 1 : 0;
             }
 
-            inputData[_state.GetBoardSize() * _state.GetBoardSize() * movesHistory * 2 + 1] = 0;
-            var input = np.array(inputData).reshape((1, 3, _state.GetBoardSize(), _state.GetBoardSize()));
+            var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
             var result = _modell.PredictMultipleOutputs(input, verbose: 0);
             var policyArray = result[0].GetData<float>();
@@ -78,12 +80,12 @@ namespace GomokuNN.Sources
                 int posX = _policy.GetUnhashedPositionX(availableMove);
                 int posY = _policy.GetUnhashedPositionY(availableMove);
 
-                _root.Leafs[index] = new MCTSTreeNode(_root)
+                _root.Leafs.Add(new MCTSTreeNode(_root)
                 {
                     PolicyProbability = policyArray[posY * _state.GetBoardSize() + posX],
                     MovePosition = new Constants.MovePosition(posX, posY),
                     MoveColor = turnColor
-                };
+                });
 
                 index++;
             }
@@ -120,20 +122,6 @@ namespace GomokuNN.Sources
 
             _policy.Update(x, y, ref state);
 
-            if (_node.Leafs == null)
-            {
-                // create nodes
-                _node.Leafs = new MCTSTreeNode[1];
-                _node.Leafs[0] = new MCTSTreeNode(_node)
-                {
-                    MovePosition = new Constants.MovePosition(x, y),
-                    MoveColor = color
-                };
-
-                _node = _node.Leafs[0];
-                return true;
-            }
-
             MCTSTreeNode? nextNode = null;
             foreach (var node in _node.Leafs)
             {
@@ -146,14 +134,14 @@ namespace GomokuNN.Sources
 
             if (nextNode == null)
             {
-                _node.Leafs = new MCTSTreeNode[1];
-                _node.Leafs[0] = new MCTSTreeNode(_node)
+                var newNode = new MCTSTreeNode(_node)
                 {
                     MovePosition = new Constants.MovePosition(x, y),
                     MoveColor = color
                 };
+                _node.Leafs.Add(newNode);
 
-                nextNode = _node.Leafs[0];
+                nextNode = newNode;
             }
 
             _node = nextNode;
@@ -174,25 +162,12 @@ namespace GomokuNN.Sources
             state.Copy(_state);
             while (!selectedNode.IsEndPoint)
             {
-                if (selectedNode.Leafs == null)
-                {
-                    break;
-                }
-
-                
                 MCTSTreeNode nextNode = selectedNode.Leafs[0];
                 var bestSelectionValue = GetNodeSelectionValue(ref selectedNode, ref nextNode);
                 for (int index = 1; index < selectedNode.Leafs.Count(); index++)
                 {
                     var node = selectedNode.Leafs[index];
-                    //if (node.IsGameEndPosition)
-                    //{
-                    //    nextNode = node;
-                    //    bestSelectionValue = double.MaxValue;
-                    //    continue;
-                    //}
-
-                    var selectionValue = GetNodeSelectionValue(ref selectedNode, ref node);// + (-0.5f + _rndGenerator.NextDouble());
+                    var selectionValue = GetNodeSelectionValue(ref selectedNode, ref node);
                     if (selectionValue > bestSelectionValue)
                     {
                         nextNode = node;
@@ -204,7 +179,7 @@ namespace GomokuNN.Sources
                 state.SetCellState(selectedNode.MovePosition.X, selectedNode.MovePosition.Y, selectedNode.MoveColor);
             }
 
-            var movesPolicy = new IncrementalMovesPolicy();
+            var movesPolicy = new IncrementalMovesPolicy(Constants.CNN_MOVE_POLICY_EXPANSION);
             movesPolicy.Init(state);
 
             var availableMovesAtSelectedNode = movesPolicy.GetHashedPositions();
@@ -237,8 +212,8 @@ namespace GomokuNN.Sources
             }
             else
             {
-                int[] inputData = new int[state.GetBoardSize() * state.GetBoardSize() * 3];
-                int secondPlayerOffset = state.GetBoardSize() * state.GetBoardSize();
+                int[] inputData = new int[state.GetBoardSize() * state.GetBoardSize() * 4];
+                int boardOffset = state.GetBoardSize() * state.GetBoardSize();
                 int dataOffset = 0;
 
                 var currentNode = selectedNode;
@@ -246,41 +221,19 @@ namespace GomokuNN.Sources
                 {
                     var value = state.GetRawCellState(i);
                     inputData[i + dataOffset] = value == Constants.CROSS_COLOR ? 1 : 0;
-                    inputData[i + secondPlayerOffset + dataOffset] = value == Constants.ZERO_COLOR ? 1 : 0;
+                    inputData[i + boardOffset + dataOffset] = value == Constants.ZERO_COLOR ? 1 : 0;
+
+                    inputData[i + boardOffset * 3 + dataOffset] = Constants.RotateColor(selectedNode.MoveColor) == Constants.CROSS_COLOR ? 1 : 0;
                 }
 
-                inputData[state.GetBoardSize() * state.GetBoardSize() * 2 + 1] = Constants.RotateColor(selectedNode.MoveColor) - 1;
-                var input = np.array(inputData).reshape((1, 3, _state.GetBoardSize(), _state.GetBoardSize()));
+                inputData[boardOffset * 2 + state.GetPositionHash(selectedNode.MovePosition.X, selectedNode.MovePosition.Y)] = 1;
+
+                var input = np.array(inputData).reshape((1, 4, _state.GetBoardSize(), _state.GetBoardSize()));
 
                 var result = _modell.PredictMultipleOutputs(input, verbose: 0);
                 var policyArray = result[0].GetData<float>();
                 var resultArray = result[1].GetData<float>();
                 score = resultArray[0];
-
-                //Console.WriteLine("Final board state:");
-                //for (int i = 0; i < state.GetBoardSize(); i++)
-                //{
-                //    string stateString = "";
-                //    for (int j = 0; j < state.GetBoardSize(); j++)
-                //    {
-                //        stateString += state.GetCellState(j, i).ToString() + " ";
-                //    }
-
-                //    Console.WriteLine(stateString);
-                //}
-
-                //Console.WriteLine("Choice: ");
-                //for (int i = 0; i < state.GetBoardSize(); i++)
-                //{
-                //    string stateString = "";
-                //    for (int j = 0; j < state.GetBoardSize(); j++)
-                //    {
-                //        stateString += policyArray[i * state.GetBoardSize() + j].ToString() + " ";
-                //    }
-
-                //    Console.WriteLine(stateString);
-                //}
-                //Console.WriteLine(score);
 
                 // Backpropagate
                 var propagationNode = selectedNode;
@@ -298,19 +251,25 @@ namespace GomokuNN.Sources
                     // expand node
                     int index = 0;
                     int turnColor = Constants.RotateColor(selectedNode.MoveColor);
+                    //for (int y = 0; y < _state.GetBoardSize(); y++)
+                    //{
+                    //    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    //    {
 
-                    selectedNode.Leafs = new MCTSTreeNode[availableMovesAtSelectedNode.Count];
+                    //    }
+                    //}
+
                     foreach (var availableMove in availableMovesAtSelectedNode)
                     {
                         int posX = _policy.GetUnhashedPositionX(availableMove);
                         int posY = _policy.GetUnhashedPositionY(availableMove);
 
-                        selectedNode.Leafs[index] = new MCTSTreeNode(selectedNode)
+                        selectedNode.Leafs.Add(new MCTSTreeNode(selectedNode)
                         {
                             PolicyProbability = policyArray[posY * state.GetBoardSize() + posX],
                             MovePosition = new Constants.MovePosition(posX, posY),
                             MoveColor = turnColor
-                        };
+                        });
 
                         ArrayGameBoardState newNodeState = new ArrayGameBoardState(_state.GetBoardSize());
                         state.Copy(state);
@@ -389,21 +348,66 @@ namespace GomokuNN.Sources
             return _node.PlayoutsCount;
         }
 
+        public List<TrainingSample> GetTrainingSamples(int winnerColor)
+        {
+            List<TrainingSample> samples = new List<TrainingSample>();
+
+            FillTrainingSamples(ref samples, winnerColor);
+
+            return samples;
+        }
+
+        public void FillTrainingSamples(ref List<TrainingSample> samples, int winnerColor)
+        {
+            ArrayGameBoardState propagationState = new ArrayGameBoardState(_state.GetBoardSize());
+            propagationState.Copy(_state);
+
+            IGameBoardState state = _state;
+
+            var currentNode = _node;
+            MCTSTreeNode? nextNode = null;
+            while (currentNode != null && currentNode.Parent != null)
+            {
+                var currentColor = Constants.RotateColor(currentNode.MoveColor);
+                var stateSample = new TrainingSample(state, nextNode == null ? new MovePosition() : nextNode.MovePosition, currentNode.MovePosition, Constants.RotateColor(currentNode.MoveColor), currentColor == winnerColor ? 1.0f : -1.0f);
+                foreach (var leaf in currentNode.Leafs)
+                {
+                    if (leaf != nextNode)
+                    {
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.X, leaf.MovePosition.Y, leaf.PolicyProbability);
+                    }
+                }
+
+                if (currentNode.MovePosition.X < 0 || currentNode.MovePosition.Y < 0)
+                {
+                    break;
+                }
+
+                propagationState.SetCellState(currentNode.MovePosition.X, currentNode.MovePosition.Y, Constants.EMPTY_COLOR);
+
+                nextNode = currentNode;
+                currentNode = currentNode.Parent;
+
+                samples.Add(stateSample);
+            }
+        }
+
         public Constants.MovePosition GetBestMove()
         {
-            if (_node.Leafs == null)
+            if (_node.Leafs.Count == 0)
             {
                 return new Constants.MovePosition();
             }
 
-            //if (_isTraining) 
-            //{
-            //    float rndValue = _rndGenerator.NextSingle();
-            //    if (rndValue < 0.15f) {
-            //        int rndChildIndex = _rndGenerator.Next(0, _node.Leafs.Length);
-            //        return _node.Leafs[rndChildIndex].MovePosition;
-            //    }
-            //}
+            if (_isTraining)
+            {
+                float rndValue = _rndGenerator.NextSingle();
+                if (rndValue < 0.15f)
+                {
+                    int rndChildIndex1 = _rndGenerator.Next(0, _node.Leafs.Count);
+                    return _node.Leafs[rndChildIndex1].MovePosition;
+                }
+            }
 
             float probability = float.MinValue;
             MCTSTreeNode? bestNode = null;
@@ -414,10 +418,10 @@ namespace GomokuNN.Sources
                     continue;
                 }
 
-                if (node.WinProbability > probability)
+                if (node.PlayoutsCount > probability)
                 {
                     bestNode = node;
-                    probability = node.WinProbability;
+                    probability = node.PlayoutsCount;
                 }
             }
 
@@ -426,13 +430,13 @@ namespace GomokuNN.Sources
                 return bestNode.MovePosition;
             }
 
-            int rndChildIndex = _rndGenerator.Next(0, _node.Leafs.Length);
+            int rndChildIndex = _rndGenerator.Next(0, _node.Leafs.Count);
             return _node.Leafs[rndChildIndex].MovePosition;
         }
 
         public float GetMoveProbability(int x, int y)
         {
-            if (_node.Leafs == null)
+            if (_node.Leafs.Count == 0)
             {
                 return 0.0f;
             }
@@ -441,7 +445,7 @@ namespace GomokuNN.Sources
             {
                 if (leaf.MovePosition.X == x && leaf.MovePosition.Y == y)
                 {
-                    return leaf.WinProbability + leaf.PolicyProbability;
+                    return leaf.WinProbability;
                 }
             }
 

@@ -11,8 +11,11 @@ namespace GomokuNN.Sources
         private readonly int HASH_SEED = 1000;
 
         HashSet<int> _moves = new HashSet<int>();
+        int _expansionValue;
 
-        public IncrementalMovesPolicy() { }
+        public IncrementalMovesPolicy(int expansionValue) {
+            _expansionValue = expansionValue;
+        }
 
         public void Init(IGameBoardState initialState)
         {
@@ -40,9 +43,9 @@ namespace GomokuNN.Sources
 
             foreach (var cell in occupiedCells)
             {
-                for (int x = -2; x <= 2; x++)
+                for (int x = -_expansionValue; x <= _expansionValue; x++)
                 {
-                    for (int y = -2; y <= 2; y++)
+                    for (int y = -_expansionValue; y <= _expansionValue; y++)
                     {
                         int posX = cell.X + x;
                         int posY = cell.Y + y;
@@ -68,9 +71,9 @@ namespace GomokuNN.Sources
             int hashedPos = GetHashedPosition(x, y);
             _moves.Remove(hashedPos);
 
-            for (int offsetX = -2; offsetX <= 2; offsetX++)
+            for (int offsetX = -_expansionValue; offsetX <= _expansionValue; offsetX++)
             {
-                for (int offsetY = -2; offsetY <= 2; offsetY++)
+                for (int offsetY = -_expansionValue; offsetY <= _expansionValue; offsetY++)
                 {
                     int posX = x + offsetX;
                     int posY = y + offsetY;

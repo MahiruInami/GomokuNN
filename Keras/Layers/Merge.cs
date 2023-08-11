@@ -16,7 +16,10 @@ namespace Keras.Layers
         public Add(params BaseLayer[] inputs)
         {
             //Parameters["inputs"] = inputs;
-            PyInstance = Instance.keras.layers.add(inputs: inputs.Select(x=>(x.PyInstance)).ToList());
+            this["inputs"] = inputs;
+
+            PyInstance = Instance.keras.layers.add;
+            Init();
         }
     }
 

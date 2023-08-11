@@ -12,6 +12,8 @@ namespace GomokuNN.Sources
         private int[] _state = new int[1];
         private int _size;
 
+        private long _zobristHash = 0;
+
         public ArrayGameBoardState(int size)
         {
             Init(size);
@@ -25,6 +27,8 @@ namespace GomokuNN.Sources
                 _state[i] = 0;
             }
             _size = size;
+
+            _zobristHash = 0;
         }
 
         public int GetPositionHash(int x, int y)
@@ -36,12 +40,13 @@ namespace GomokuNN.Sources
         {
             int hashedPos = GetPositionHash(x, y);
             _state[hashedPos] = color;
+
+            _zobristHash ^= ZobristHash.GetCellZobristHash(_size, x, y, color);
         }
 
-        public int GetBoardStateHash()
+        public long GetBoardStateHash()
         {
-            int hash = 0;
-            return hash;
+            return _zobristHash;
         }
 
         public int GetRawCellState(int index)

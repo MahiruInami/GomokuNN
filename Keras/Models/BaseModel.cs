@@ -80,8 +80,8 @@ namespace Keras.Models
         /// <param name="run_eagerly"> Bool. Defaults to False. If True, this Model's logic will not be wrapped in a tf.function. Recommended to leave this as None unless your Model cannot be run inside a tf.function. run_eagerly=True is not supported when using.</param>
         /// <param name="steps_per_execution"> Int. Defaults to 1. The number of batches to run during each tf.function call. Running multiple batches inside a single tf.function call can greatly improve performance on TPUs or small models with a large Python overhead. At most, one full epoch will be run each execution</param>
         /// <param name="jit_compile"> If True, compile the model training step with XLA. XLA is an optimizing compiler for machine learning. jit_compile is not enabled for by default. Note that jit_compile=True may not necessarily work for all models.</param>
-        public void Compile(StringOrInstance optimizer, Dictionary<string, string> loss, Dictionary<string, string> metrics = null, float[] loss_weights = null,
-                      string[] weighted_metrics = null, bool run_eagerly = false, int steps_per_execution = 1, bool jit_compile = false)
+        public void Compile(StringOrInstance optimizer, Dictionary<string, string> loss, Dictionary<string, string> metrics = null, Dictionary<string, float> loss_weights = null,
+                      Dictionary<string, string> weighted_metrics = null, bool run_eagerly = false, int steps_per_execution = 1, bool jit_compile = false)
         {
             var args = new Dictionary<string, object>();
             args["optimizer"] = optimizer;
@@ -90,8 +90,14 @@ namespace Keras.Models
             {
                 args["metrics"] = ToDict(metrics);
             }
-            args["loss_weights"] = loss_weights;
-            args["weighted_metrics"] = weighted_metrics;
+            if (loss_weights != null)
+            {
+                args["loss_weights"] = ToDict(loss_weights);
+            }
+            if (weighted_metrics != null)
+            {
+                args["weighted_metrics"] = ToDict(weighted_metrics);
+            }
             args["run_eagerly"] = run_eagerly;
             args["steps_per_execution"] = steps_per_execution;
             args["jit_compile"] = jit_compile;
@@ -176,9 +182,9 @@ namespace Keras.Models
             if (validation_data != null)
             {
                 if (validation_data.Length == 2)
-                    args["validation_data"] = new PyTuple (new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject });
+                    args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject });
                 else if (validation_data.Length == 3)
-                    args["validation_data"] = new PyTuple (new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject, validation_data[2].PyObject });
+                    args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject, validation_data[2].PyObject });
             }
 
             args["shuffle"] = shuffle;
@@ -223,8 +229,47 @@ namespace Keras.Models
         /// <param name="workers">Integer. Used for generator or keras.utils.Sequence input only. Maximum number of processes to spin up when using process-based threading. If unspecified, workers will default to 1.</param>
         /// <param name="use_multiprocessing">Boolean. Used for generator or keras.utils.Sequence input only. If True, use process-based threading. If unspecified, use_multiprocessing will default to False. .</param>
         /// <returns>A History object. Its History.history attribute is a record of training loss values and metrics values at successive epochs, as well as validation loss values and validation metrics values (if applicable).</returns>
+        //public History Fit(NDarray x, NDarray[] y, int? batch_size = null, int epochs = 1, int verbose = 1, Callback[] callbacks = null,
+        //                float validation_split = 0.0f, NDarray[] validation_data = null, bool shuffle = true, Dictionary<int, float> class_weight = null,
+        //                NDarray sample_weight = null, int initial_epoch = 0, int? steps_per_epoch = null, int? validation_steps = null,
+        //                int? validation_batch_size = null, int[] validation_freq = null, int max_queue_size = 10, int workers = 1, bool use_multiprocessing = false)
+        //{
+        //    var args = new Dictionary<string, object>();
+        //    args["x"] = x;
+        //    args["y"] = y;
+        //    args["batch_size"] = batch_size;
+        //    args["epochs"] = epochs;
+        //    args["verbose"] = verbose;
+        //    args["callbacks"] = callbacks;
+        //    args["validation_split"] = validation_split;
+        //    if (validation_data != null)
+        //    {
+        //        if (validation_data.Length == 2)
+        //            args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject });
+        //        else if (validation_data.Length == 3)
+        //            args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject, validation_data[2].PyObject });
+        //    }
+
+        //    args["shuffle"] = shuffle;
+        //    if (class_weight != null)
+        //        args["class_weight"] = ToDict(class_weight);
+        //    args["sample_weight"] = sample_weight;
+        //    args["initial_epoch"] = initial_epoch;
+        //    args["steps_per_epoch"] = steps_per_epoch;
+        //    args["validation_steps"] = validation_steps;
+        //    args["validation_batch_size"] = validation_batch_size;
+        //    args["validation_freq"] = validation_freq;
+        //    args["max_queue_size"] = max_queue_size;
+        //    args["workers"] = workers;
+        //    args["use_multiprocessing"] = use_multiprocessing;
+
+        //    PyObject py = InvokeMethod("fit", args);
+
+        //    return new History(py);
+        //}
+
         public History Fit(NDarray x, NDarray[] y, int? batch_size = null, int epochs = 1, int verbose = 1, Callback[] callbacks = null,
-                        float validation_split = 0.0f, NDarray[] validation_data = null, bool shuffle = true, Dictionary<int, float> class_weight = null,
+                        float validation_split = 0.0f, NDarray validation_data_in = null, NDarray[] validation_data_out = null, bool shuffle = true, Dictionary<int, float> class_weight = null,
                         NDarray sample_weight = null, int initial_epoch = 0, int? steps_per_epoch = null, int? validation_steps = null,
                         int? validation_batch_size = null, int[] validation_freq = null, int max_queue_size = 10, int workers = 1, bool use_multiprocessing = false)
         {
@@ -236,12 +281,19 @@ namespace Keras.Models
             args["verbose"] = verbose;
             args["callbacks"] = callbacks;
             args["validation_split"] = validation_split;
-            if (validation_data != null)
+            if (validation_data_in != null)
             {
-                if (validation_data.Length == 2)
-                    args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject });
-                else if (validation_data.Length == 3)
-                    args["validation_data"] = new PyTuple(new PyObject[] { validation_data[0].PyObject, validation_data[1].PyObject, validation_data[2].PyObject });
+                var validationDataPyObject = new PyObject[validation_data_out.Length];
+                for (int i = 0; i <  validation_data_out.Length; i++)
+                {
+                    validationDataPyObject[i] = validation_data_out[i].PyObject;
+                }
+                var validationOutDataList = new PyList(validationDataPyObject);
+                var validation_data = new PyTuple(new PyObject[] { validation_data_in.PyObject, validationOutDataList });
+                args["validation_data"] = validation_data;
+
+                //args["validation_data_in"] = validation_data_in;
+                //args["validation_data_out"] = validation_data_out;
             }
 
             args["shuffle"] = shuffle;

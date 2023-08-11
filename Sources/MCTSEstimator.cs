@@ -36,7 +36,7 @@ namespace GomokuNN.Sources
                 }
             }
 
-            _policy = new IncrementalMovesPolicy();
+            _policy = new IncrementalMovesPolicy(2);
             _policy.Init(_state);
 
             _estimatorColor = turnColor;
@@ -44,25 +44,22 @@ namespace GomokuNN.Sources
             _zobristHash.Clear();
 
             var availableMoves = _policy.GetHashedPositions();
-            _root = new MCTSTreeNode(null, availableMoves.Count)
+            _root = new MCTSTreeNode(null)
             {
                 MovePosition = new Constants.MovePosition(),
                 MoveColor = Constants.NULL_COLOR
             };
 
-            int index = 0;
             foreach (var availableMove in availableMoves)
             {
                 int posX = _policy.GetUnhashedPositionX(availableMove);
                 int posY = _policy.GetUnhashedPositionY(availableMove);
 
-                _root.Leafs[index] = new MCTSTreeNode(_root)
+                _root.Leafs.Add(new MCTSTreeNode(_root)
                 {
                     MovePosition = new Constants.MovePosition(posX, posY),
                     MoveColor = turnColor
-                };
-
-                index++;
+                });
             }
 
             _node = _root;
@@ -85,20 +82,6 @@ namespace GomokuNN.Sources
 
             _policy.Update(x, y, ref state);
 
-            if (_node.Leafs == null)
-            {
-                // create nodes
-                _node.Leafs = new MCTSTreeNode[1];
-                _node.Leafs[0] = new MCTSTreeNode(_node)
-                {
-                    MovePosition = new Constants.MovePosition(x, y),
-                    MoveColor = color
-                };
-
-                _node = _node.Leafs[0];
-                return true;
-            }
-
             MCTSTreeNode? nextNode = null;
             foreach (var node in _node.Leafs)
             {
@@ -111,14 +94,13 @@ namespace GomokuNN.Sources
 
             if (nextNode == null)
             {
-                _node.Leafs = new MCTSTreeNode[1];
-                _node.Leafs[0] = new MCTSTreeNode(_node)
+                nextNode = new MCTSTreeNode(_node)
                 {
                     MovePosition = new Constants.MovePosition(x, y),
                     MoveColor = color
                 };
 
-                nextNode = _node.Leafs[0];
+                _node.Leafs.Add(nextNode);
             }
 
             _node = nextNode;
@@ -143,11 +125,6 @@ namespace GomokuNN.Sources
             IGameBoardState state = copyState;
             while (!selectedNode.IsEndPoint)
             {
-                if (selectedNode.Leafs == null)
-                {
-                    break;
-                }
-
                 MCTSTreeNode nextNode = selectedNode.Leafs[0];
                 var bestSelectionValue = GetNodeSelectionValue(ref selectedNode, ref nextNode);
                 for (int index = 1; index < selectedNode.Leafs.Count(); index++)
@@ -166,7 +143,7 @@ namespace GomokuNN.Sources
                 state.SetCellState(selectedNode.MovePosition.X, selectedNode.MovePosition.Y, selectedNode.MoveColor);
             }
 
-            var movesPolicy = new IncrementalMovesPolicy();
+            var movesPolicy = new IncrementalMovesPolicy(2);
             movesPolicy.Init(state);
 
             var availableMovesAtSelectedNode = movesPolicy.GetHashedPositions();
@@ -197,7 +174,7 @@ namespace GomokuNN.Sources
 
                         IGameBoardState iTaskState = taskState;
 
-                        var taskMovePolicy = new IncrementalMovesPolicy();
+                        var taskMovePolicy = new IncrementalMovesPolicy(2);
                         taskMovePolicy.Init(taskState);
 
                         tasks[i] = Task.Factory.StartNew(() =>
@@ -230,7 +207,7 @@ namespace GomokuNN.Sources
 
                     IGameBoardState iTaskState = taskState;
 
-                    var taskMovePolicy = new IncrementalMovesPolicy();
+                    var taskMovePolicy = new IncrementalMovesPolicy(2);
                     taskMovePolicy.Init(taskState);
 
                     var result = PlayRandomSimulation(ref iTaskState, ref taskMovePolicy, Constants.RotateColor(selectedNode.MoveColor));
@@ -280,19 +257,16 @@ namespace GomokuNN.Sources
 
                 //if (validMoves.Count > 0)
                 //{
-                    selectedNode.Leafs = new MCTSTreeNode[availableMovesAtSelectedNode.Count];
                     foreach (var availableMove in availableMovesAtSelectedNode)
                     {
                         int posX = _policy.GetUnhashedPositionX(availableMove);
                         int posY = _policy.GetUnhashedPositionY(availableMove);
 
-                        selectedNode.Leafs[index] = new MCTSTreeNode(selectedNode)
+                        selectedNode.Leafs.Add(new MCTSTreeNode(selectedNode)
                         {
                             MovePosition = new Constants.MovePosition(posX, posY),
                             MoveColor = turnColor
-                        };
-
-                        index++;
+                        });
                     }
                 //}
             }
@@ -400,7 +374,7 @@ namespace GomokuNN.Sources
 
         public Constants.MovePosition GetBestMove()
         {
-            if (_node.Leafs == null)
+            if (_node.Leafs.Count == 0)
             {
                 return new Constants.MovePosition();
             }
@@ -411,7 +385,7 @@ namespace GomokuNN.Sources
 
         public float GetMoveProbability(int x, int y)
         {
-            if (_node.Leafs == null)
+            if (_node.Leafs.Count == 0)
             {
                 return 0.0f;
             }
@@ -425,6 +399,19 @@ namespace GomokuNN.Sources
             }
 
             return 0.0f;
+        }
+
+        public List<TrainingSample> GetTrainingSamples(int winnerColor)
+        {
+            var samples = new List<TrainingSample>();
+            FillTrainingSamples(ref samples, winnerColor);
+
+            return samples;
+        }
+
+        public void FillTrainingSamples(ref List<TrainingSample> samples, int winnerColor)
+        {
+
         }
     }
 }

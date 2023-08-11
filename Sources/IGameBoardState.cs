@@ -12,6 +12,6 @@ namespace GomokuNN.Sources
         public int GetCellState(int x, int y);
         public void SetCellState(int x, int y, int color);
         public int GetBoardSize();
-        public int GetBoardStateHash();
+        public long GetBoardStateHash();
     }
 }

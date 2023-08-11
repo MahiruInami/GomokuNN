@@ -29,7 +29,7 @@ namespace GomokuNN.Sources
                 }
             }
 
-            _policy = new IncrementalMovesPolicy();
+            _policy = new IncrementalMovesPolicy(5);
             _policy.Init(_state);
         }
 
@@ -80,6 +80,19 @@ namespace GomokuNN.Sources
         public float GetMoveProbability(int x, int y)
         {
             return 0.0f;
+        }
+
+        public List<TrainingSample> GetTrainingSamples(int winnerColor)
+        {
+            var samples = new List<TrainingSample>();
+            FillTrainingSamples(ref samples, winnerColor);
+
+            return samples;
+        }
+
+        public void FillTrainingSamples(ref List<TrainingSample> samples, int winnerColor)
+        {
+
         }
     }
 }

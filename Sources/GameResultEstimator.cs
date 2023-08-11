@@ -113,7 +113,7 @@ namespace GomokuNN.Sources
 
             if (estimateForTie)
             {
-                var movesPolicy = new IncrementalMovesPolicy();
+                var movesPolicy = new IncrementalMovesPolicy(2);
                 movesPolicy.Init(boardState);
 
                 if (movesPolicy.GetHashedPositionsCount() == 0)

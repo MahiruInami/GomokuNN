@@ -18,6 +18,9 @@ namespace GomokuNN.Sources
         public void SetExplorationConst(float value);
         public float GetMoveProbability(int x, int y);
 
+        public List<TrainingSample> GetTrainingSamples(int winnerColor);
+        public void FillTrainingSamples(ref List<TrainingSample> samples, int winnerColor);
+
         public void DebugMenuDraw(ref GameBoard gameBoard);
         public void DebugFieldDraw();
     }
