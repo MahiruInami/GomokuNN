@@ -67,6 +67,11 @@ namespace GomokuNN.Sources
             networkOutput[moveIndex] = value;
         }
 
+        public void SetPolicyOutputByIndex(int moveIndex, float value)
+        {
+            networkOutput[moveIndex] = value;
+        }
+
 
         public static List<TrainingSample> CreateFromGameHistory(GameHistory gameHistory, ref HashSet<long> knownPositions)
         {

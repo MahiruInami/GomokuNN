@@ -41,7 +41,7 @@ namespace GomokuNN.Sources
             }
 
             _state.SetCellState(x, y, _currentTurnColor);
-            _result = GameResultEstimator.EstimateResult(ref _state, x, y, true);
+            _result = GameResultEstimator.EstimateResult(_state, x, y, true);
             if (_result == Constants.GameResult.IN_PROGRESS)
             {
                 _currentTurnColor = Constants.RotateColor(_currentTurnColor);

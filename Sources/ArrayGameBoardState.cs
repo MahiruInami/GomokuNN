@@ -44,6 +44,15 @@ namespace GomokuNN.Sources
             _zobristHash ^= ZobristHash.GetCellZobristHash(_size, x, y, color);
         }
 
+        public void UndoSetCellState(int x, int y)
+        {
+            int hashedPos = GetPositionHash(x, y);
+            int stateColor = _state[hashedPos];
+
+            _state[hashedPos] = 0;
+            _zobristHash ^= ZobristHash.GetCellZobristHash(_size, x, y, stateColor);
+        }
+
         public long GetBoardStateHash()
         {
             return _zobristHash;
@@ -85,6 +94,7 @@ namespace GomokuNN.Sources
             }
 
             other._state.CopyTo(_state, 0);
+            _zobristHash = other._zobristHash;
         }
     }
 }

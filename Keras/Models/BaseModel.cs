@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Tensorflow.Train;
 using static System.Net.WebRequestMethods;
@@ -832,8 +833,10 @@ namespace Keras.Models
         /// <param name="filePath">The file path.</param>
         public void SaveOnnx(string filePath)
         {
-            var onnx_model = Instance.keras2onnx.convert_keras(model: (PyObject)this.PyInstance);
-            System.IO.File.WriteAllText(filePath, onnx_model.ToString());
+            var onnx_model = Instance.keras2onnx.convert_keras(model: (PyObject)this.PyInstance, target_opset: 18);
+            Instance.keras2onnx.utils.save_model(onnx_model, filePath);
+
+            //System.IO.File.WriteAllText(filePath, onnx_model.ToString());
         }
 
         /// <summary>

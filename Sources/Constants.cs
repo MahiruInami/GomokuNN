@@ -20,10 +20,12 @@ namespace GomokuNN.Sources
         public const int CROSS_COLOR = 1;
         public const int ZERO_COLOR = 2;
 
-        public const int CNN_MOVE_POLICY_EXPANSION = 1;
+        public const int CNN_MOVE_POLICY_EXPANSION = 2;
         public const int PLAYOUTS_TO_EXPANSION = 100;
 
-        public const string MODEL_NAME = "gomoku_net";
+        public const float TRAINING_GAMES_RND_MOVE_CHANCE = 0.15f;
+
+        public const string MODEL_NAME = "gomoku_zero";
 
         public enum GameResult
         {

@@ -8,7 +8,7 @@ namespace GomokuNN.Sources
 {
     internal class GameResultEstimator
     {
-        public static Constants.GameResult EstimateResult(ref IGameBoardState boardState, int lastX, int lastY, bool estimateForTie = false)
+        public static Constants.GameResult EstimateResult(IGameBoardState boardState, int lastX, int lastY, bool estimateForTie = false)
         {
             int targetColor = boardState.GetCellState(lastX, lastY);
             int piecesInRow = 1;

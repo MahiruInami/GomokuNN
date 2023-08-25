@@ -103,6 +103,7 @@ namespace GomokuNN.Sources
             var history = model.Fit(input, new NDarray[] { policyOut, valueOut }, epochs: epochCount, batch_size: batchSize, verbose: 1, validation_data_in: inputValidation, validation_data_out: new NDarray[] { policyOutValidation, valueOutValidation });
 
             model.Save(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
+            model.SaveOnnx(String.Format("{0}_{1}_{2}.keras.onnx", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
         }
     }
 }
