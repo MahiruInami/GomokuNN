@@ -73,7 +73,15 @@ namespace GomokuNN.Sources
 
         private static void SetupPyEnv()
         {
-            Runtime.PythonDLL = @"C:\Python38\python38.dll";
+            if (OperatingSystem.IsWindows())
+            {
+                Runtime.PythonDLL = @"C:\Python38\python38.dll";
+            }
+            else
+            {
+                Runtime.PythonDLL = @"/usr/local/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/libpython3.11.dylib";
+                Environment.SetEnvironmentVariable("PYTHONNET_PYDLL", @"/usr/local/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/libpython3.11.dylib");
+            }
         }
 
         private static void SetupModel()
