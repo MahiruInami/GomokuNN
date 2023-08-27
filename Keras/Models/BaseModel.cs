@@ -514,6 +514,37 @@ namespace Keras.Models
         }
 
         /// <summary>
+        /// Runs a single gradient update on a single batch of data.
+        /// </summary>
+        /// <param name="x">Numpy array of training data, or list of Numpy arrays if the model has multiple inputs. If all inputs in the model are named, you can also pass a dictionary mapping input names to Numpy arrays.</param>
+        /// <param name="y">Numpy array of target data, or list of Numpy arrays if the model has multiple outputs. If all outputs in the model are named, you can also pass a dictionary mapping output names to Numpy arrays.</param>
+        /// <param name="sample_weight">Optional array of the same length as x, containing weights to apply to the model's loss for each sample. In the case of temporal data, you can pass a 2D array with shape (samples, sequence_length), to apply a different weight to every timestep of every sample. In this case you should make sure to specify sample_weight_mode="temporal" in compile().</param>
+        /// <param name="class_weight">Optional dictionary mapping class indices (integers) to a weight (float) to apply to the model's loss for the samples from this class during training. This can be useful to tell the model to "pay more attention" to samples from an under-represented class.</param>
+        /// <param name="reset_metrics">Optional array of the same length as x, containing weights to apply to the model's loss for each sample. In the case of temporal data, you can pass a 2D array with shape (samples, sequence_length), to apply a different weight to every timestep of every sample. In this case you should make sure to specify sample_weight_mode="temporal" in compile().</param> 
+        /// <param name="return_dict">If True, loss and metric results are returned as a dict, with each key being the name of the metric. If False, they are returned as a list.</param>
+        /// <returns>Scalar training loss (if the model has a single output and no metrics) or list of scalars (if the model has multiple outputs and/or metrics). The attribute model.metrics_names will give you the display labels for the scalar outputs.</returns>
+        public double[] TrainOnBatch(NDarray x, NDarray[] y, NDarray sample_weight = null, Dictionary<int, float> class_weight = null, bool reset_metrics = false, bool return_dict = false)
+        {
+            var args = new Dictionary<string, object>();
+            args["x"] = x;
+            args["y"] = y;
+            args["sample_weight"] = sample_weight;
+            args["class_weight"] = class_weight;
+            args["reset_metrics"] = reset_metrics;
+            args["return_dict"] = return_dict;
+
+            var pyresult = InvokeMethod("train_on_batch", args);
+            if (pyresult == null) return default;
+            double[] result;
+            if (!pyresult.IsIterable())
+                result = new double[] { pyresult.As<double>() };
+            else
+                result = pyresult.As<double[]>();
+            pyresult.Dispose();
+            return result;
+        }
+
+        /// <summary>
         /// Tests the on batch.
         /// </summary>
         /// <param name="x">Numpy array of test data, or list of Numpy arrays if the model has multiple inputs. If all inputs in the model are named, you can also pass a dictionary mapping input names to Numpy arrays.</param>

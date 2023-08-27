@@ -1,4 +1,5 @@
-﻿using Raylib_cs;
+﻿using GomokuNN.Sources.Estimators;
+using Raylib_cs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,84 +29,114 @@ namespace GomokuNN.Sources
         {
             GymParticipant currentAgent = new GymParticipant()
             {
-                id = 1,
-                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 1, 2.0f)
+                id = 1000,
+                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 20, 2.0f)
             };
 
             // start selfplay session
+            var rnd = new Random();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+
             var samples = new List<TrainingSample>();
-            const int TRAINING_GAMES_COUNT = 1000;
-            for (int gameIndex = 0; gameIndex < TRAINING_GAMES_COUNT && samples.Count < 500000; gameIndex++)
+            const int TRAINING_GAMES_COUNT = 2000;
+            for (int gameIndex = 0; samples.Count < 40000; gameIndex++)
             {
                 var gameSettings = new GameSettings();
 
-                gameSettings.firstAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
-                gameSettings.secondAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
+                //gameSettings.firstAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
+                //gameSettings.secondAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
 
-                if (gameIndex % 100 == 0)
+                if (gameIndex % 10 == 0)
                 {
                     Console.WriteLine("Starting trainging game " + gameIndex);
                     Console.WriteLine("Samples count: " + samples.Count);
                     Console.WriteLine("Known positions count: " + _knownPositions.Count);
                 }
-                
                 var gameController = new GameController(gameSettings);
-                gameController.CreateEstimators();
                 gameController.StartGame();
 
+                var agent = new CNNEstimator(true);
+                agent.LoadModel(currentAgent.agent.modelPath);
+                agent.InitFromState(gameController.gameBoard.GetBoardState(), Constants.CROSS_COLOR, Constants.CROSS_COLOR);
+
+                int playoutsCount = 2;// rnd.Next(currentAgent.agent.playoutsCount);
                 while (!gameController.IsGameEnded())
                 {
-                    if (gameController.firstAgent != null && !gameController.firstAgent.HasContiniousEstimationSupport())
-                    {
-                        gameController.firstAgent.EstimateOnce();
-                    }
-                    if (gameController.secondAgent != null && !gameController.secondAgent.HasContiniousEstimationSupport())
-                    {
-                        gameController.secondAgent.EstimateOnce();
-                    }
+                    //if (gameController.firstAgent != null && !gameController.firstAgent.HasContiniousEstimationSupport())
+                    //{
+                    //    gameController.firstAgent.EstimateOnce();
+                    //}
+                    //if (gameController.secondAgent != null && !gameController.secondAgent.HasContiniousEstimationSupport())
+                    //{
+                    //    gameController.secondAgent.EstimateOnce();
+                    //}
 
-                    if (gameController.firstAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.firstAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                    //if (gameController.firstAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.firstAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                    //{
+                    //    var bestMove = gameController.firstAgent.GetBestMove();
+                    //    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    //    {
+                    //    }
+                    //}
+
+                    //if (gameController.secondAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.secondAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                    //{
+                    //    var bestMove = gameController.secondAgent.GetBestMove();
+                    //    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    //    {
+                    //    }
+                    //}
+
+                    agent.EstimateOnce();
+                    if (agent.GetCurrentPlayoutsCount() > playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
                     {
-                        var bestMove = gameController.firstAgent.GetBestMove();
+                        var color = gameController.gameBoard.GetCurrentTurnColor();
+                        var bestMove = agent.GetBestMove();
                         if (gameController.MakeMove(bestMove.X, bestMove.Y))
                         {
+                            agent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
                         }
                     }
 
-                    if (gameController.secondAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.secondAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                    if (agent.GetCurrentPlayoutsCount() > playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
                     {
-                        var bestMove = gameController.secondAgent.GetBestMove();
+                        var color = gameController.gameBoard.GetCurrentTurnColor();
+                        var bestMove = agent.GetBestMove();
                         if (gameController.MakeMove(bestMove.X, bestMove.Y))
                         {
+                            agent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
                         }
                     }
                 }
 
                 if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
                 {
-                    var gameSamples = gameController.firstAgent.GetTrainingSamples(Constants.CROSS_COLOR, ref _knownPositions);
+                    var gameSamples = agent.GetTrainingSamples(Constants.CROSS_COLOR, ref _knownPositions);
                     samples.AddRange(gameSamples);
                 }
 
                 if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
                 {
-                    var gameSamples = gameController.secondAgent.GetTrainingSamples(Constants.ZERO_COLOR, ref _knownPositions);
+                    var gameSamples = agent.GetTrainingSamples(Constants.ZERO_COLOR, ref _knownPositions);
                     samples.AddRange(gameSamples);
                 }
             }
 
-            var generation = CNNHelper.GetCNNGeneration(currentAgent.agent.modelPath);
-            NetworkTrainer.Train(CNNHelper.GetCNNGeneration(currentAgent.agent.modelPath), generation + 1, ref samples, 0.2f, 32, 1);
+            watch.Stop();
+            Console.WriteLine("Self-play time: " + watch.ElapsedMilliseconds / 1000.0);
+
+            NetworkTrainer.Train(startingGeneration, startingGeneration + 1, ref samples, 0.2f, 4096, 1);
 
             _baseLines.Add(currentAgent);
 
             var newGenerationAgent = new GymParticipant()
             {
                 id = 10000,
-                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(generation + 1), 2, 2.0f)
+                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration + 1), 100, 2.0f)
             };
 
             int[] wonGamesCount = new int[_baseLines.Count];
+            int[] losesGamesCount = new int[_baseLines.Count];
             const int GYM_GAMES_COUNT = 4;
             for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
             {
@@ -161,22 +192,32 @@ namespace GomokuNN.Sources
                         wonGamesCount[agentIndex]++;
                     }
 
+                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR && !newNetFirst)
+                    {
+                        losesGamesCount[agentIndex]++;
+                    }
+
                     if (gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR && !newNetFirst)
                     {
                         wonGamesCount[agentIndex]++;
+                    }
+
+                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR && newNetFirst)
+                    {
+                        losesGamesCount[agentIndex]++;
                     }
                 }
             }
 
             for (int i = 0; i < wonGamesCount.Length; i++)
             {
-                float newGenerationWinrate = (float)wonGamesCount[i] / (float)GYM_GAMES_COUNT;
-                Console.WriteLine("Winrate against " + CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath) + ": " + newGenerationWinrate);
+                int draws = GYM_GAMES_COUNT - wonGamesCount[i] - losesGamesCount[i];
+                Console.WriteLine("Winrate against " + CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath) + ": " + wonGamesCount[i] + " " + losesGamesCount[i] + " " + draws);
             }
             _baseLines.RemoveAt(_baseLines.Count - 1);
             _knownPositions.Clear();
 
-            return generation + 1;
+            return startingGeneration + 1;
         }
     }
 }

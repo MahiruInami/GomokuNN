@@ -53,5 +53,25 @@ namespace GomokuNN.Sources
 
             Raylib.DrawTexture(_helperTextures[cellState], x * Constants.CELL_SIZE + _boardOffsetX, y * Constants.CELL_SIZE + _boardOffsetY, Color.WHITE);
         }
+
+        public void DrawPolicyText(string value, int x, int y)
+        {
+            if (_textures == null)
+            {
+                return;
+            }
+
+            Raylib.DrawText(value, x * Constants.CELL_SIZE + _boardOffsetX + (int)(Constants.CELL_SIZE * 0.1f), y * Constants.CELL_SIZE + _boardOffsetY + (int)(Constants.CELL_SIZE * 0.1f), 10, Color.BLACK);
+        }
+
+        public void DrawWinrateText(string value, int x, int y)
+        {
+            if (_textures == null)
+            {
+                return;
+            }
+
+            Raylib.DrawText(value, x * Constants.CELL_SIZE + _boardOffsetX + (int)(Constants.CELL_SIZE * 0.1f), y * Constants.CELL_SIZE + _boardOffsetY + (int)(Constants.CELL_SIZE * 0.6f), 10, Color.BLACK);
+        }
     }
 }

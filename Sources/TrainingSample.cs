@@ -40,7 +40,7 @@ namespace GomokuNN.Sources
 
                     input[dataOffset * 3 + moveIndex] = color == Constants.CROSS_COLOR ? 1 : 0;
 
-                    networkOutput[moveIndex] = (float)rndProvider.NextDouble() / 1000.0f;
+                    networkOutput[moveIndex] = (nextMove.X >= 0 && nextMove.Y >= 0) ? (float)rndProvider.NextDouble() / 1000.0f : 0.0f;
                 }
             }
 

@@ -211,80 +211,96 @@ namespace GomokuNN.Sources
             network.SaveOnnx(String.Format("{0}_{1}_{2}.keras.onnx", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, 0));
         }
 
-        //private IGameEstimator createAgent(ref IGameEstimator previousAgent, AgentType agentType, int agentColor, bool isTraining, int networkGeneration, IGameBoardState state)
-        //{
-        //    if (agentType == AgentType.CNN)
-        //    {
-        //        var agent = new CNNEstimator(isTraining);
-        //        agent.LoadModel(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, networkGeneration));
-        //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
+        private static void SetModelLearningRate(int generation, int resultGeneration, float rate)
+        {
+            var network = Keras.Models.Model.LoadModel(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, generation));
 
-        //        return agent;
-        //    }
-        //    else if (agentType == AgentType.MCTS)
-        //    {
-        //        var agent = new MCTSEstimator();
-        //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
+            network.Compile(optimizer: new Keras.Optimizers.Adam(learning_rate: rate),
+                loss: new Dictionary<string, string> { { "policy_net", "categorical_crossentropy" }, { "value_net", "mean_squared_error" } },
+                metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
+                weighted_metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
+                loss_weights: new Dictionary<string, float> { { "policy_net", 1.0f }, { "value_net", 1.0f } });
 
-        //        return agent;
-        //    }
-        //    else
-        //    {
+            network.Summary();
 
-        //        var agent = new RandomEstimator();
-        //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
+            network.Save(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
+            network.SaveOnnx(String.Format("{0}_{1}_{2}.keras.onnx", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
+        }
 
-        //        return agent;
-        //    }
-        //}
+            //private IGameEstimator createAgent(ref IGameEstimator previousAgent, AgentType agentType, int agentColor, bool isTraining, int networkGeneration, IGameBoardState state)
+            //{
+            //    if (agentType == AgentType.CNN)
+            //    {
+            //        var agent = new CNNEstimator(isTraining);
+            //        agent.LoadModel(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, networkGeneration));
+            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
 
-        //public void TrainNetworkOnSelfPlayData()
-        //{
-        //    if (_agent1Type == AgentType.CNN && _agent2Type == AgentType.CNN)
-        //    {
-        //        if (_agent1Won > _agent2Won)
-        //        {
-        //            NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+            //        return agent;
+            //    }
+            //    else if (agentType == AgentType.MCTS)
+            //    {
+            //        var agent = new MCTSEstimator();
+            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
 
-        //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-        //            _agent1NetworkGeneration = _latestNetworkGeneration;
-        //            _agent2NetworkGeneration = _latestNetworkGeneration;
-        //        }
-        //        else
-        //        {
-        //            NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+            //        return agent;
+            //    }
+            //    else
+            //    {
 
-        //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-        //            _agent1NetworkGeneration = _latestNetworkGeneration;
-        //            _agent2NetworkGeneration = _latestNetworkGeneration;
-        //        }
+            //        var agent = new RandomEstimator();
+            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
 
-        //    }
-        //    else if (_agent1Type == AgentType.CNN)
-        //    {
-        //        NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+            //        return agent;
+            //    }
+            //}
 
-        //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-        //        _agent1NetworkGeneration = _latestNetworkGeneration;
-        //        _agent2NetworkGeneration = _latestNetworkGeneration;
-        //    }
-        //    else if (_agent1Type == AgentType.CNN)
-        //    {
-        //        NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+            //public void TrainNetworkOnSelfPlayData()
+            //{
+            //    if (_agent1Type == AgentType.CNN && _agent2Type == AgentType.CNN)
+            //    {
+            //        if (_agent1Won > _agent2Won)
+            //        {
+            //            NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
 
-        //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-        //        _agent1NetworkGeneration = _latestNetworkGeneration;
-        //        _agent2NetworkGeneration = _latestNetworkGeneration;
-        //    }
-        //    else
-        //    {
-        //        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+            //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
+            //            _agent1NetworkGeneration = _latestNetworkGeneration;
+            //            _agent2NetworkGeneration = _latestNetworkGeneration;
+            //        }
+            //        else
+            //        {
+            //            NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
 
-        //        _latestNetworkGeneration = _latestNetworkGeneration + 1;
-        //        _agent1NetworkGeneration = _latestNetworkGeneration;
-        //        _agent2NetworkGeneration = _latestNetworkGeneration;
-        //    }
-        //}
+            //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
+            //            _agent1NetworkGeneration = _latestNetworkGeneration;
+            //            _agent2NetworkGeneration = _latestNetworkGeneration;
+            //        }
+
+            //    }
+            //    else if (_agent1Type == AgentType.CNN)
+            //    {
+            //        NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+
+            //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
+            //        _agent1NetworkGeneration = _latestNetworkGeneration;
+            //        _agent2NetworkGeneration = _latestNetworkGeneration;
+            //    }
+            //    else if (_agent1Type == AgentType.CNN)
+            //    {
+            //        NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+
+            //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
+            //        _agent1NetworkGeneration = _latestNetworkGeneration;
+            //        _agent2NetworkGeneration = _latestNetworkGeneration;
+            //    }
+            //    else
+            //    {
+            //        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
+
+            //        _latestNetworkGeneration = _latestNetworkGeneration + 1;
+            //        _agent1NetworkGeneration = _latestNetworkGeneration;
+            //        _agent2NetworkGeneration = _latestNetworkGeneration;
+            //    }
+            //}
 
         public void Run()
         {
@@ -320,67 +336,8 @@ namespace GomokuNN.Sources
 
                         _currentGame?.firstAgent?.OnDrawCell(x, y, ref _renderHelper);
                         _currentGame?.secondAgent?.OnDrawCell(x, y, ref _renderHelper);
-
-                        //if (_showAIProbabilities)
-                        //{
-                        //    if (!_isTraining)
-                        //    {
-                        //        float probability = _estimator.GetMoveProbability(x, y);
-                        //        Raylib.DrawText(probability.ToString("F2"), x * Constants.CELL_SIZE + offsetX + (int)(Constants.CELL_SIZE * 0.25f), y * Constants.CELL_SIZE + offsetY + (int)(Constants.CELL_SIZE * 0.4f), 12, Color.BLACK);
-                        //    }
-                        //    else
-                        //    {
-                        //        if (_gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                        //        {
-                        //            float probability = _agent1.GetMoveProbability(x, y);
-                        //            Raylib.DrawText(probability.ToString("F2"), x * Constants.CELL_SIZE + offsetX + (int)(Constants.CELL_SIZE * 0.25f), y * Constants.CELL_SIZE + offsetY + (int)(Constants.CELL_SIZE * 0.4f), 12, Color.BLACK);
-                        //        }
-                        //        else
-                        //        {
-                        //            float probability = _agent2.GetMoveProbability(x, y);
-                        //            Raylib.DrawText(probability.ToString("F2"), x * Constants.CELL_SIZE + offsetX + (int)(Constants.CELL_SIZE * 0.25f), y * Constants.CELL_SIZE + offsetY + (int)(Constants.CELL_SIZE * 0.4f), 12, Color.BLACK);
-                        //        }
-                        //    }
-                        //}
                     }
                 }
-
-                //if (_showAIBestMove && !_isGameEnded && !_isTraining)
-                //{
-                //    var bestMove = _estimator.GetBestMove();
-                //    if (bestMove.X >= 0)
-                //    {
-                //        Raylib.DrawTexture(_helperTextures[_gameBoard.GetCurrentTurnColor()], bestMove.X * Constants.CELL_SIZE + offsetX, bestMove.Y * Constants.CELL_SIZE + offsetY, Color.WHITE);
-                //    }
-                //}
-
-                //if (_showAIBestMove && !_isGameEnded && _isTraining)
-                //{
-                //    if (_gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                //    {
-                //        var bestMove = _agent1.GetBestMove();
-                //        if (bestMove.X >= 0)
-                //        {
-                //            Raylib.DrawTexture(_helperTextures[_gameBoard.GetCurrentTurnColor()], bestMove.X * Constants.CELL_SIZE + offsetX, bestMove.Y * Constants.CELL_SIZE + offsetY, Color.WHITE);
-                //        }
-                //    }
-                //    else
-                //    {
-                //        var bestMove = _agent2.GetBestMove();
-                //        if (bestMove.X >= 0)
-                //        {
-                //            Raylib.DrawTexture(_helperTextures[_gameBoard.GetCurrentTurnColor()], bestMove.X * Constants.CELL_SIZE + offsetX, bestMove.Y * Constants.CELL_SIZE + offsetY, Color.WHITE);
-                //        }
-                //    }
-                //}
-
-
-                //if (!_isGameEnded)
-                //{
-                //    int textPosX = (_gameBoard.GetBoardSize() + 1) * Constants.CELL_SIZE + 10;
-                //    Raylib.DrawText("Current move", textPosX, 32, 24, Color.BLACK);
-                //    Raylib.DrawTexture(_textures[_gameBoard.GetCurrentTurnColor()], textPosX + 164, 30, Color.WHITE);
-                //}
 
                 rlImGui.Begin();
                 
@@ -588,189 +545,160 @@ namespace GomokuNN.Sources
                 //}
 
 
-                //if (ImGui.Button("Train on game files"))
-                //{
-                //    HashSet<long> knownPositions = new HashSet<long>();
-                //    _trainingSamples.Clear();
+                if (ImGui.Button("Train on game files"))
+                {
+                    var _latestNetworkGeneration = 75;
+                    HashSet<long> knownPositions = new HashSet<long>();
+                    _trainingSamples.Clear();
 
-                //    var currentDirectory = Directory.GetCurrentDirectory();
-                //    for (int sample = 1; sample <= 10; sample++)
-                //    {
-                //        var games = Directory.GetFiles(currentDirectory + "\\Resources\\DataBase\\" + sample.ToString());
-                //        foreach (var gameName in games)
-                //        {
-                //            var gameHistory = GameHistory.CreateFromPSQFile(gameName);
+                    var currentDirectory = Directory.GetCurrentDirectory();
+                    for (int sample = 1; sample <= 10; sample++)
+                    {
+                        var games = Directory.GetFiles(currentDirectory + "\\Resources\\DataBase\\" + sample.ToString());
+                        foreach (var gameName in games)
+                        {
+                            var gameHistory = GameHistory.CreateFromPSQFile(gameName);
 
-                //            const int HISTORIES_COUNT = 8;
-                //            var gameHistories = new GameHistory[HISTORIES_COUNT];
-                //            for (int gameIndex = 0; gameIndex < HISTORIES_COUNT; gameIndex++)
-                //            {
-                //                gameHistories[gameIndex] = new GameHistory();
-                //                gameHistories[gameIndex].moves = new List<Constants.MovePosition>();
+                            const int HISTORIES_COUNT = 8;
+                            var gameHistories = new GameHistory[HISTORIES_COUNT];
+                            for (int gameIndex = 0; gameIndex < HISTORIES_COUNT; gameIndex++)
+                            {
+                                gameHistories[gameIndex] = new GameHistory();
+                                gameHistories[gameIndex].moves = new List<Constants.MovePosition>();
 
-                //                gameHistories[gameIndex].startingColor = gameHistory.startingColor;
-                //                gameHistories[gameIndex].winningColor = gameHistory.winningColor;
-                //                gameHistories[gameIndex].result = gameHistory.result;
+                                gameHistories[gameIndex].startingColor = gameHistory.startingColor;
+                                gameHistories[gameIndex].winningColor = gameHistory.winningColor;
+                                gameHistories[gameIndex].result = gameHistory.result;
 
-                //                foreach (var move in gameHistory.moves)
-                //                {
-                //                    if (gameIndex == 0)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.X, move.Y));
-                //                    }
-                //                    else if (gameIndex == 1)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.X, move.Y));
-                //                    }
-                //                    else if (gameIndex == 2)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.X, 15 - 1 - move.Y));
-                //                    }
-                //                    else if (gameIndex == 3)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.X, 15 - 1 - move.Y));
-                //                    }
-                //                    else if (gameIndex == 4)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.Y, move.X));
-                //                    }
-                //                    else if (gameIndex == 5)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.Y, move.X));
-                //                    }
-                //                    else if (gameIndex == 6)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.Y, 15 - 1 - move.X));
-                //                    }
-                //                    else if (gameIndex == 7)
-                //                    {
-                //                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.Y, 15 - 1 - move.X));
+                                foreach (var move in gameHistory.moves)
+                                {
+                                    if (gameIndex == 0)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.X, move.Y));
+                                    }
+                                    else if (gameIndex == 1)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.X, move.Y));
+                                    }
+                                    else if (gameIndex == 2)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.X, 15 - 1 - move.Y));
+                                    }
+                                    else if (gameIndex == 3)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.X, 15 - 1 - move.Y));
+                                    }
+                                    else if (gameIndex == 4)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.Y, move.X));
+                                    }
+                                    else if (gameIndex == 5)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.Y, move.X));
+                                    }
+                                    else if (gameIndex == 6)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(move.Y, 15 - 1 - move.X));
+                                    }
+                                    else if (gameIndex == 7)
+                                    {
+                                        gameHistories[gameIndex].moves.Add(new Constants.MovePosition(15 - 1 - move.Y, 15 - 1 - move.X));
 
-                //                    }
-                //                }
-                //            }
+                                    }
+                                }
+                            }
 
-                //            for (int gameIndex = 0; gameIndex < HISTORIES_COUNT; gameIndex++)
-                //            {
-                //                TrainingSample.FillFromGameHistory(ref _trainingSamples, gameHistories[gameIndex], ref knownPositions);
-                //            }
+                            for (int gameIndex = 0; gameIndex < HISTORIES_COUNT; gameIndex++)
+                            {
+                                TrainingSample.FillFromGameHistory(ref _trainingSamples, gameHistories[gameIndex], ref knownPositions);
+                            }
 
-                //            if (_trainingSamples.Count > 2000000)
-                //            {
-                //                Console.WriteLine("Training with " + sample + " sample...");
-                //                Console.WriteLine("Board positions count: " + _trainingSamples.Count);
+                            if (_trainingSamples.Count > 2000000)
+                            {
+                                Console.WriteLine("Training with " + sample + " sample...");
+                                Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                //                NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 32, _trainingEpochCount);
+                                NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
 
-                //                _trainingSamples.Clear();
+                                _trainingSamples.Clear();
 
-                //                _latestNetworkGeneration = _latestNetworkGeneration + 1;
-                //                _agent1NetworkGeneration = _latestNetworkGeneration;
-                //                _agent2NetworkGeneration = _latestNetworkGeneration;
-                //            }
-                //        }
+                                _latestNetworkGeneration = _latestNetworkGeneration + 1;
+                            }
+                        }
 
-                //        if (_trainingSamples.Count > 2000000)
-                //        {
-                //            Console.WriteLine("Training with " + sample + " sample...");
-                //            Console.WriteLine("Board positions count: " + _trainingSamples.Count);
+                        if (_trainingSamples.Count > 2000000)
+                        {
+                            Console.WriteLine("Training with " + sample + " sample...");
+                            Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                //            NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 32, _trainingEpochCount);
+                            NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
 
-                //            _trainingSamples.Clear();
+                            _trainingSamples.Clear();
 
-                //            _latestNetworkGeneration = _latestNetworkGeneration + 1;
-                //            _agent1NetworkGeneration = _latestNetworkGeneration;
-                //            _agent2NetworkGeneration = _latestNetworkGeneration;
-                //        }
-                //    }
+                            _latestNetworkGeneration = _latestNetworkGeneration + 1;
+                        }
+                    }
 
-                //    if (_trainingSamples.Count > 0)
-                //    {
-                //        Console.WriteLine("Board positions count: " + _trainingSamples.Count);
+                    if (_trainingSamples.Count > 0)
+                    {
+                        Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                //        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 32, _trainingEpochCount);
+                        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
 
-                //        _trainingSamples.Clear();
-
-                //        _latestNetworkGeneration = _latestNetworkGeneration + 1;
-                //        _agent1NetworkGeneration = _latestNetworkGeneration;
-                //        _agent2NetworkGeneration = _latestNetworkGeneration;
-                //    }
-                //}
+                        _trainingSamples.Clear();
+                    }
+                }
 
                 if (ImGui.Button("Train CNN"))
                 {
                     var gym = new AIGym();
 
-                    gym.AddBaseLineParticipant(new GymParticipant()
-                    {
-                        id = 54,
-                        agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(20), 2, 2.0f)
-                    });
+                    //gym.AddBaseLineParticipant(new GymParticipant()
+                    //{
+                    //    id = 1,
+                    //    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(1), 2, 2.0f)
+                    //});
 
-                    gym.AddBaseLineParticipant(new GymParticipant()
-                    {
-                        id = 56,
-                        agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(56), 2, 2.0f)
-                    });
-
-                    int trainingAgent = 65;
-                    for (int i = 0; i < 50; i++)
+                    //int trainingAgent = 97;
+                    int trainingAgent = 71;
+                    for (int i = 0; i < 100; i++)
                     {
                         trainingAgent = gym.TrainAgent(trainingAgent);
                     }
                 }
 
-                //if (ImGui.Button("Test"))
-                //{
-                //    float[] inputData = new float[_currentGame.gameBoard.GetBoardSize() * _currentGame.gameBoard.GetBoardSize() * 4];
-                //    int boardOffset = _currentGame.gameBoard.GetBoardSize() * _currentGame.gameBoard.GetBoardSize();
-                //    int dataOffset = 0;
+                if (ImGui.Button("Test"))
+                {
+                    var pos = new HashSet<long>();
 
-                //    var boardState = _currentGame.gameBoard.GetBoardState() as ArrayGameBoardState;
-                //    for (int i = 0; i < _currentGame.gameBoard.GetBoardSize() * _currentGame.gameBoard.GetBoardSize(); i++)
-                //    {
-                //        var value = boardState.GetRawCellState(i);
-                //        inputData[i + dataOffset] = value == Constants.CROSS_COLOR ? 1 : 0;
-                //        inputData[i + boardOffset + dataOffset] = value == Constants.ZERO_COLOR ? 1 : 0;
+                    var samples1 = _currentGame.firstAgent?.GetTrainingSamples(1, ref pos);
+                    var samples2 = _currentGame.secondAgent?.GetTrainingSamples(2, ref pos);
 
-                //        inputData[i + boardOffset * 3 + dataOffset] = _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR ? 1 : 0;
-                //    }
+                    Console.WriteLine("Test!");
 
-                //    inputData[boardOffset * 2 + _lastMovePosition.X + _lastMovePosition.Y * _currentGame.gameBoard.GetBoardSize()] = 1;
+                    //inferenceSession.
+                    //policyOutput.F
 
-                //    var inputTensor = new DenseTensor<float>(inputData, new int[] { 1, 4, _currentGame.gameBoard.GetBoardSize(), _currentGame.gameBoard.GetBoardSize() });
-                //    var modelInput = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor<float>("input_layer", inputTensor) };
+                    //float bestValue = -1000;
+                    //var samples = new List<TrainingSample>();
+                    //var nextMove = new MovePosition();
+                    //var stateSample = new TrainingSample(_currentGame.gameBoard.GetBoardState(), new MovePosition(), _lastMovePosition, _currentGame.gameBoard.GetCurrentTurnColor(), valueOutput[0]);
+                    //for (int y = 0; y < _currentGame.gameBoard.GetBoardSize(); y++)
+                    //{
+                    //    for (int x = 0; x < _currentGame.gameBoard.GetBoardSize(); x++)
+                    //    {
+                    //        stateSample.SetPolicyOutputForMove(_currentGame.gameBoard.GetBoardSize(), x, y, policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x));
+                    //        if (policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x) > bestValue)
+                    //        {
+                    //            bestValue = policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x);
+                    //            Console.WriteLine("Best value: " + x + " " + y + " " + bestValue);
+                    //        }
+                    //    }
+                    //}
+                    //samples.Add(stateSample);
 
-                //    var inferenceSession = new InferenceSession("gomoku_net_15_6.keras.onnx");
-                //    var output = inferenceSession.Run(modelInput).ToArray();
-                //    var policyOutput = output[0].AsTensor<float>();
-                //    var valueOutput = output[1].AsTensor<float>();
-
-                //    //inferenceSession.
-                //    //policyOutput.F
-
-                //    float bestValue = -1000;
-                //    var samples = new List<TrainingSample>();
-                //    var nextMove = new MovePosition();
-                //    var stateSample = new TrainingSample(_currentGame.gameBoard.GetBoardState(), new MovePosition(), _lastMovePosition, _currentGame.gameBoard.GetCurrentTurnColor(), valueOutput[0]);
-                //    for (int y = 0; y < _currentGame.gameBoard.GetBoardSize(); y++)
-                //    {
-                //        for (int x = 0; x < _currentGame.gameBoard.GetBoardSize(); x++)
-                //        {
-                //            stateSample.SetPolicyOutputForMove(_currentGame.gameBoard.GetBoardSize(), x, y, policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x));
-                //            if (policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x) > bestValue)
-                //            {
-                //                bestValue = policyOutput.ElementAt(y * _currentGame.gameBoard.GetBoardSize() + x);
-                //                Console.WriteLine("Best value: " + x + " " + y + " " + bestValue);
-                //            }
-                //        }
-                //    }
-                //    samples.Add(stateSample);
-
-                //    NetworkTrainer.Train(6, 99, ref samples, 0, 1, 1);
-                //}
+                    //NetworkTrainer.Train(6, 99, ref samples, 0, 1, 1);
+                }
 
                 if (ImGui.Button("New Game"))
                 {
@@ -964,23 +892,23 @@ namespace GomokuNN.Sources
                             }
                         }
 
-                        if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                        {
-                            var bestMove = _currentGame.firstAgent.GetBestMove();
-                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                                _lastMovePosition = bestMove;
-                            }
-                        }
+                        //if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                        //{
+                        //    var bestMove = _currentGame.firstAgent.GetBestMove();
+                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                        //    {
+                        //        _lastMovePosition = bestMove;
+                        //    }
+                        //}
 
-                        if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                        {
-                            var bestMove = _currentGame.secondAgent.GetBestMove();
-                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                                _lastMovePosition = bestMove;
-                            }
-                        }
+                        //if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                        //{
+                        //    var bestMove = _currentGame.secondAgent.GetBestMove();
+                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                        //    {
+                        //        _lastMovePosition = bestMove;
+                        //    }
+                        //}
                     }
                 }
 

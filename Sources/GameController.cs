@@ -28,11 +28,10 @@ namespace GomokuNN.Sources
 
         public void CreateEstimators()
         {
-            firstAgent = CreateEstimator(gameSettings.firstAgent, Constants.CROSS_COLOR, Constants.CROSS_COLOR);
-            secondAgent = CreateEstimator(gameSettings.secondAgent, Constants.CROSS_COLOR, Constants.ZERO_COLOR);
+            firstAgent = CreateEstimator(gameBoard, gameSettings.firstAgent, Constants.CROSS_COLOR, Constants.CROSS_COLOR);
+            secondAgent = CreateEstimator(gameBoard, gameSettings.secondAgent, Constants.CROSS_COLOR, Constants.ZERO_COLOR);
         }
-
-        private IGameEstimator? CreateEstimator(GameAgentSettings agentSettings, int moveColor, int estimatorColor)
+        public static IGameEstimator? CreateEstimator(GameBoard gameBoard, GameAgentSettings agentSettings, int moveColor, int estimatorColor)
         {
             if (agentSettings.type == EstimatorType.NONE)
             {

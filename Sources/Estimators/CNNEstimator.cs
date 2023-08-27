@@ -2,6 +2,7 @@
 using MathNet.Numerics.Distributions;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using System.Xml.Linq;
 using static GomokuNN.Sources.Constants;
 
 namespace GomokuNN.Sources.Estimators
@@ -20,6 +21,7 @@ namespace GomokuNN.Sources.Estimators
         Random _rndGenerator = new Random();
 
         bool _debugDrawBestMove = false;
+        bool _debugDrawProbabilities = false;
 
         InferenceSession? _inferenceSession = null;
 
@@ -92,12 +94,12 @@ namespace GomokuNN.Sources.Estimators
 
         public void LoadModel(string modelPath)
         {
-            _inferenceSession = new InferenceSession(modelPath + ".onnx");
+            _inferenceSession = CNNModelCache.Instance.LoadModel(modelPath + ".onnx");
         }
 
         public void SaveModel(string modelPath)
         {
-            
+
             //_model.Save(modelPath, true, "keras");
         }
 
@@ -197,17 +199,29 @@ namespace GomokuNN.Sources.Estimators
         {
             // Selection
             // Select tree node with best value until leaf node is reached
+            List<int> bestNodes = new List<int>();
+
             var selectedNode = _node;
             ArrayGameBoardState state = new ArrayGameBoardState(_state.GetBoardSize());
             state.Copy(_state);
             while (!selectedNode.IsEndPoint)
             {
-                MCTSTreeNode nextNode = selectedNode.Leafs[0];
-                var bestSelectionValue = GetNodeSelectionValue(ref selectedNode, ref nextNode);
-                for (int index = 1; index < selectedNode.Leafs.Count(); index++)
+                double[] dirichlet = null;
+
+                if (_isTraining)
+                {
+                    var alpha = new double[selectedNode.Leafs.Count];
+                    Array.Fill(alpha, 0.15);
+                    dirichlet = Dirichlet.Sample(_rndGenerator, alpha);
+                }
+
+                MCTSTreeNode? nextNode = null;
+                var bestSelectionValue = double.MinValue;
+                bestNodes.Clear();
+                for (int index = 0; index < selectedNode.Leafs.Count(); index++)
                 {
                     var node = selectedNode.Leafs[index];
-                    var selectionValue = GetNodeSelectionValue(ref selectedNode, ref node);
+                    var selectionValue = _isTraining ? GetNodeSelectionValue(ref selectedNode, ref node, index, dirichlet) : GetNodeSelectionValue(ref selectedNode, ref node);
                     if (node.IsTerminal)
                     {
                         nextNode = node;
@@ -218,10 +232,25 @@ namespace GomokuNN.Sources.Estimators
                     {
                         nextNode = node;
                         bestSelectionValue = selectionValue;
+
+                        bestNodes.Clear();
+                        bestNodes.Add(index);
+                    }
+                    else if (selectionValue == bestSelectionValue)
+                    {
+                        bestNodes.Add(index);
                     }
                 }
 
-                selectedNode = nextNode;
+                if (bestNodes.Count <= 1)
+                {
+                    selectedNode = nextNode;
+                } 
+                else
+                {
+                    var rndNodeIndex = _rndGenerator.Next(bestNodes.Count);
+                    selectedNode = selectedNode.Leafs[bestNodes[rndNodeIndex]];
+                }
                 state.SetCellState(selectedNode.MovePosition.X, selectedNode.MovePosition.Y, selectedNode.MoveColor);
             }
 
@@ -337,12 +366,26 @@ namespace GomokuNN.Sources.Estimators
 
         public double GetNodeSelectionValue(ref MCTSTreeNode parent, ref MCTSTreeNode child)
         {
-            if (child.PlayoutsCount == 0)
+            if (child.PlayoutsCount == 0 && child.PolicyProbability < 0.0001 && parent.PlayoutsCount > 1)
             {
-                return _mctsExplorationConst * child.PolicyProbability * Math.Sqrt(parent.PlayoutsCount) / (1.0f + child.PlayoutsCount);
+                // DO SOMETING???
+                //return _mctsExplorationConst * child.PolicyProbability * Math.Sqrt(parent.PlayoutsCount) / (1.0f + child.PlayoutsCount);
             }
 
             return child.WinProbability + _mctsExplorationConst * child.PolicyProbability * Math.Sqrt(parent.PlayoutsCount) / (1.0f + child.PlayoutsCount);
+        }
+
+        public double GetNodeSelectionValue(ref MCTSTreeNode parent, ref MCTSTreeNode child, int nodeIndex, double[] dirichletNoise)
+        {
+            const double epsilon = 0.25;
+            var policyProbability = (1 - epsilon) * child.PolicyProbability + epsilon * dirichletNoise[nodeIndex];
+
+            if (child.PlayoutsCount == 0)
+            {
+                return _mctsExplorationConst * policyProbability * Math.Sqrt(parent.PlayoutsCount) / (1.0f + child.PlayoutsCount);
+            }
+
+            return child.WinProbability + _mctsExplorationConst * policyProbability * Math.Sqrt(parent.PlayoutsCount) / (1.0f + child.PlayoutsCount);
         }
 
         public void SetExplorationConst(float value)
@@ -358,6 +401,18 @@ namespace GomokuNN.Sources.Estimators
                 if (x == bestMove.X && y == bestMove.Y)
                 {
                     renderHelper.DrawAINextMoveBoardCell(RotateColor(_node.MoveColor), x, y);
+                }
+            }
+
+            if (_debugDrawProbabilities)
+            {
+                foreach (var leaf in _node.Leafs)
+                {
+                    if (x == leaf.MovePosition.X && y == leaf.MovePosition.Y)
+                    {
+                        renderHelper.DrawPolicyText(leaf.PolicyProbability.ToString("F2"), x, y);
+                        renderHelper.DrawWinrateText(leaf.WinProbability.ToString("F2"), x, y);
+                    }
                 }
             }
         }
@@ -377,6 +432,7 @@ namespace GomokuNN.Sources.Estimators
 
             //ImGui.Checkbox("Show probabilities", ref _showAIProbabilities);
             ImGui.Checkbox("Show best move", ref _debugDrawBestMove);
+            ImGui.Checkbox("Show probabilities", ref _debugDrawProbabilities);
 
             if (ImGui.Button("Move back"))
             {
@@ -426,164 +482,306 @@ namespace GomokuNN.Sources.Estimators
                     break;
                 }
 
+                var currentColor = RotateColor(currentNode.MoveColor);
+                var reward = currentColor == winnerColor ? 1.0f : -1.0f;
+
                 long zobristHash = propagationState.GetBoardStateHash();
                 if (!knownPositions.Contains(zobristHash))
                 {
-                    var currentColor = RotateColor(currentNode.MoveColor);
-
-                    var stateSample = new TrainingSample(propagationState, nextNode == null ? new MovePosition() : nextNode.MovePosition, currentNode.MovePosition, currentColor, currentColor == winnerColor ? 1.0f : -1.0f);
+                    var winRate = Math.Clamp((nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability) + reward, -1.0f, 1.0f);
+                    var stateSample = new TrainingSample(propagationState, nextNode == null ? new MovePosition() : nextNode.MovePosition, currentNode.MovePosition, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
                     foreach (var leaf in currentNode.Leafs)
                     {
-                        if (leaf != nextNode)
-                        {
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.X, leaf.MovePosition.Y, leaf.PolicyProbability);
-                        }
-                        else
-                        {
-                            var reward = currentColor == winnerColor ? 0.6f : -0.6f;
-                            var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.X, leaf.MovePosition.Y, rewardValue);
-                        }
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.X, leaf.MovePosition.Y, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
                     }
 
                     // softmax
-                    float max = stateSample.networkOutput.Sum();
-                    for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                    if (currentNode.Leafs.Count > 0)
                     {
-                        stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
                     }
-                    
+
                     samples.Add(stateSample);
                     knownPositions.Add(propagationState.GetBoardStateHash());
+                }
 
-                    ArrayGameBoardState rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
-                    for (int y = 0; y < _state.GetBoardSize(); y++)
+                var rotatedPos = new Constants.MovePosition();
+                ArrayGameBoardState rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
                     {
-                        for (int x = 0; x < _state.GetBoardSize(); x++)
-                        {
-                            rotatedState.SetCellState(y, propagationState.GetBoardSize() - 1 - x, propagationState.GetCellState(x, y));
-                        }
+                        rotatedState.SetCellState(y, propagationState.GetBoardSize() - 1 - x, propagationState.GetCellState(x, y));
                     }
+                }
 
-                    var rotatedPos = new Constants.MovePosition(currentNode.MovePosition.Y, propagationState.GetBoardSize() - 1 - currentNode.MovePosition.X);
-                    stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, currentColor == winnerColor ? 1.0f : -1.0f);
+                long rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
+                    rotatedPos = new Constants.MovePosition(currentNode.MovePosition.Y, propagationState.GetBoardSize() - 1 - currentNode.MovePosition.X);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
                     foreach (var leaf in currentNode.Leafs)
                     {
-                        if (leaf != nextNode)
-                        {
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, leaf.PolicyProbability);
-                        }
-                        else
-                        {
-                            var reward = currentColor == winnerColor ? 0.6f : -0.6f;
-                            var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, rewardValue);
-                        }
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //}
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, rewardValue);
+                        //}
                     }
 
                     // softmax
-                    for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                    if (currentNode.Leafs.Count > 0)
                     {
-                        stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
-                    }
-                    samples.Add(stateSample);
-
-                    // 
-                    rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
-                    for (int y = 0; y < _state.GetBoardSize(); y++)
-                    {
-                        for (int x = 0; x < _state.GetBoardSize(); x++)
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
                         {
-                            rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - x, propagationState.GetBoardSize() - 1 - y, propagationState.GetCellState(x, y));
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
                         }
                     }
+                    samples.Add(stateSample);
+                }
 
+
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    {
+                        rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - x, propagationState.GetBoardSize() - 1 - y, propagationState.GetCellState(x, y));
+                    }
+                }
+
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
                     rotatedPos = new Constants.MovePosition(propagationState.GetBoardSize() - 1 - currentNode.MovePosition.X, propagationState.GetBoardSize() - 1 - currentNode.MovePosition.Y);
-                    stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, currentColor == winnerColor ? 1.0f : -1.0f);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
                     foreach (var leaf in currentNode.Leafs)
                     {
-                        if (leaf != nextNode)
-                        {
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, leaf.PolicyProbability);
-                        }
-                        else
-                        {
-                            var reward = currentColor == winnerColor ? 0.6f : -0.6f;
-                            var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, rewardValue);
-                        }
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //}
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, rewardValue);
+                        //}
                     }
 
                     // softmax
-                    for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                    if (currentNode.Leafs.Count > 0)
                     {
-                        stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
-                    }
-                    samples.Add(stateSample);
-
-                    //
-                    rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
-                    for (int y = 0; y < _state.GetBoardSize(); y++)
-                    {
-                        for (int x = 0; x < _state.GetBoardSize(); x++)
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
                         {
-                            rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - y, x, propagationState.GetCellState(x, y));
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
                         }
                     }
+                    samples.Add(stateSample);
+                }
 
+                //
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    {
+                        rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - y, x, propagationState.GetCellState(x, y));
+                    }
+                }
+
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
                     rotatedPos = new Constants.MovePosition(propagationState.GetBoardSize() - 1 - currentNode.MovePosition.Y, currentNode.MovePosition.X);
-                    stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, currentColor == winnerColor ? 1.0f : -1.0f);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
                     foreach (var leaf in currentNode.Leafs)
                     {
-                        if (leaf != nextNode)
-                        {
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, leaf.MovePosition.X, leaf.PolicyProbability);
-                        }
-                        else
-                        {
-                            var reward = currentColor == winnerColor ? 0.6f : -0.6f;
-                            var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
-                        }
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, leaf.MovePosition.X, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //}
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
+                        //}
                     }
 
                     // softmax
-                    for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                    if (currentNode.Leafs.Count > 0)
                     {
-                        stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
                     }
                     samples.Add(stateSample);
+                }
 
-                    //
-                    rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
-                    for (int y = 0; y < _state.GetBoardSize(); y++)
+                //
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
                     {
-                        for (int x = 0; x < _state.GetBoardSize(); x++)
-                        {
-                            rotatedState.SetCellState(y, x, propagationState.GetCellState(x, y));
-                        }
+                        rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - x, y, propagationState.GetCellState(x, y));
                     }
+                }
 
-                    rotatedPos = new Constants.MovePosition(currentNode.MovePosition.Y, currentNode.MovePosition.X);
-                    stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, currentColor == winnerColor ? 1.0f : -1.0f);
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
+                    rotatedPos = new Constants.MovePosition(propagationState.GetBoardSize() - 1 - currentNode.MovePosition.X, currentNode.MovePosition.Y);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
                     foreach (var leaf in currentNode.Leafs)
                     {
-                        if (leaf != nextNode)
-                        {
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, leaf.PolicyProbability);
-                        }
-                        else
-                        {
-                            var reward = currentColor == winnerColor ? 0.6f : -0.6f;
-                            var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
-                            stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
-                        }
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, leaf.MovePosition.Y, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //    }
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, leaf.MovePosition.Y, rewardValue);
+                        //}
                     }
 
                     // softmax
-                    for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                    if (currentNode.Leafs.Count > 0)
                     {
-                        stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
+                    }
+                    samples.Add(stateSample);
+                }
+
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    {
+                        rotatedState.SetCellState(y, x, propagationState.GetCellState(x, y));
+                    }
+                }
+
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
+                    rotatedPos = new Constants.MovePosition(currentNode.MovePosition.Y, currentNode.MovePosition.X);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
+                    foreach (var leaf in currentNode.Leafs)
+                    {
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //    }
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
+                        //}
+                    }
+
+                    // softmax
+                    if (currentNode.Leafs.Count > 0)
+                    {
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
+                    }
+                    samples.Add(stateSample);
+                }
+
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    {
+                        rotatedState.SetCellState(propagationState.GetBoardSize() - 1 - y, propagationState.GetBoardSize() - 1 - x, propagationState.GetCellState(x, y));
+                    }
+                }
+
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
+                    rotatedPos = new Constants.MovePosition(propagationState.GetBoardSize() - 1 - currentNode.MovePosition.Y, propagationState.GetBoardSize() - 1 - currentNode.MovePosition.X);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
+                    foreach (var leaf in currentNode.Leafs)
+                    {
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, propagationState.GetBoardSize() - 1 - leaf.MovePosition.X, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //    }
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
+                        //}
+                    }
+
+                    // softmax
+                    if (currentNode.Leafs.Count > 0)
+                    {
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
+                    }
+                    samples.Add(stateSample);
+                }
+
+                rotatedState = new ArrayGameBoardState(_state.GetBoardSize());
+                for (int y = 0; y < _state.GetBoardSize(); y++)
+                {
+                    for (int x = 0; x < _state.GetBoardSize(); x++)
+                    {
+                        rotatedState.SetCellState(x, propagationState.GetBoardSize() - 1 - y, propagationState.GetCellState(x, y));
+                    }
+                }
+
+                rotatedZobristHash = propagationState.GetBoardStateHash();
+                if (!knownPositions.Contains(rotatedZobristHash))
+                {
+                    rotatedPos = new Constants.MovePosition(currentNode.MovePosition.X, propagationState.GetBoardSize() - 1 - currentNode.MovePosition.Y);
+                    var stateSample = new TrainingSample(rotatedState, nextNode == null ? new MovePosition() : nextNode.MovePosition, rotatedPos, currentColor, nextNode == null ? -currentNode.WinProbability : nextNode.WinProbability);
+                    foreach (var leaf in currentNode.Leafs)
+                    {
+                        //if (leaf != nextNode)
+                        //{
+                        stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.X, propagationState.GetBoardSize() - 1 - leaf.MovePosition.Y, (float)leaf.PlayoutsCount / (float)currentNode.PlayoutsCount);
+                        //    }
+                        //else
+                        //{
+                        //    var rewardValue = Math.Min(Math.Max(0.01f, reward + leaf.PolicyProbability), 1.0f);
+                        //    stateSample.SetPolicyOutputForMove(_state.GetBoardSize(), leaf.MovePosition.Y, leaf.MovePosition.X, rewardValue);
+                        //}
+                    }
+
+                    // softmax
+                    if (currentNode.Leafs.Count > 0)
+                    {
+                        float max = stateSample.networkOutput.Sum();
+                        for (int i = 0; i < stateSample.networkOutput.Length; i++)
+                        {
+                            stateSample.networkOutput[i] = stateSample.networkOutput[i] / max;
+                        }
                     }
                     samples.Add(stateSample);
                 }
@@ -601,7 +799,7 @@ namespace GomokuNN.Sources.Estimators
                     nodesToInitialCounter++;
                 }
 
-                if (nodesToInitialCounter < 4)
+                if (nodesToInitialCounter < 2)
                 {
                     break;
                 }
@@ -617,50 +815,6 @@ namespace GomokuNN.Sources.Estimators
 
             float probability = float.MinValue;
             MCTSTreeNode? bestNode = null;
-            if (_isTraining)
-            {
-                foreach (var node in _node.Leafs)
-                {
-                    if (node.IsTerminal)
-                    {
-                        return node.MovePosition;
-                    }
-                }
-
-                var alpha = new double[_node.Leafs.Count];
-                Array.Fill(alpha, 0.08);
-
-                const double epsilon = 0.25;
-                var dirichlet = Dirichlet.Sample(_rndGenerator, alpha);
-                int nodeIndex = 0;
-                foreach (var node in _node.Leafs)
-                {
-                    if (node.IsTerminal)
-                    {
-                        bestNode = node;
-                        break;
-                    }
-
-                    var nodeProbability = (1 - epsilon) * node.PolicyProbability + epsilon * dirichlet[nodeIndex];
-                    if (nodeProbability > probability)
-                    {
-                        bestNode = node;
-                        probability = (float)nodeProbability;
-                    }
-
-                    nodeIndex++;
-                }
-
-                if (bestNode != null)
-                {
-                    return bestNode.MovePosition;
-                }
-
-                int rndIndex = _rndGenerator.Next(0, _node.Leafs.Count);
-                return _node.Leafs[rndIndex].MovePosition;
-            }
-
-
             foreach (var node in _node.Leafs)
             {
                 if (node.IsTerminal)
