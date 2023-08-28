@@ -76,119 +76,42 @@ namespace GomokuNN.Sources
             Runtime.PythonDLL = @"C:\Python38\python38.dll";
         }
 
+        private static BaseLayer AddResidualBlock(int filtersCount, BaseLayer x)
+        {
+            var firstLayer = new Conv2D(filtersCount, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(x);
+            firstLayer = new BatchNormalization().Set(firstLayer);
+            firstLayer = new Activation("relu").Set(firstLayer);
+            firstLayer = new Conv2D(filtersCount, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(firstLayer);
+            firstLayer = new BatchNormalization().Set(firstLayer);
+            firstLayer = new Keras.Layers.Add(new BaseLayer[] { firstLayer, x });
+            firstLayer = new Activation("relu").Set(firstLayer);
+
+            return firstLayer;
+        }
+
         private static void SetupModel()
         {
-            const int FILTERS_COUNT = 256;
+            const int FILTERS_COUNT = 128;
 
             var inputLayer = new Input(shape: (4, Constants.DEFAULT_BOARD_SIZE, Constants.DEFAULT_BOARD_SIZE), name: "input_layer");
 
-            BaseLayer netLayer = new Conv2D(FILTERS_COUNT, (5, 5).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(inputLayer);
+            BaseLayer netLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(inputLayer);
             netLayer = new BatchNormalization().Set(netLayer);
             netLayer = new Activation("relu").Set(netLayer);
 
-            var firstLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(netLayer);
-            firstLayer = new BatchNormalization().Set(firstLayer);
-            firstLayer = new Activation("relu").Set(firstLayer);
-            firstLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(firstLayer);
-            firstLayer = new BatchNormalization().Set(firstLayer);
-            firstLayer = new Keras.Layers.Add(new BaseLayer[] { firstLayer, netLayer });
-            firstLayer = new Activation("relu").Set(firstLayer);
+            var resBlock = netLayer;
+            for (int i = 0; i < 3; i++)
+            {
+                resBlock = AddResidualBlock(FILTERS_COUNT, resBlock);
+            }
 
-            var secondLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(firstLayer);
-            secondLayer = new BatchNormalization().Set(secondLayer);
-            secondLayer = new Activation("relu").Set(secondLayer);
-            secondLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(secondLayer);
-            secondLayer = new BatchNormalization().Set(secondLayer);
-            secondLayer = new Keras.Layers.Add(new BaseLayer[] { secondLayer, firstLayer });
-            secondLayer = new Activation("relu").Set(secondLayer);
-
-            var thirdLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(secondLayer);
-            thirdLayer = new BatchNormalization().Set(thirdLayer);
-            thirdLayer = new Activation("relu").Set(thirdLayer);
-            thirdLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(thirdLayer);
-            thirdLayer = new BatchNormalization().Set(thirdLayer);
-            thirdLayer = new Keras.Layers.Add(new BaseLayer[] { thirdLayer, secondLayer });
-            thirdLayer = new Activation("relu").Set(thirdLayer);
-
-            var forthLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(thirdLayer);
-            forthLayer = new BatchNormalization().Set(forthLayer);
-            forthLayer = new Activation("relu").Set(forthLayer);
-            forthLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(forthLayer);
-            forthLayer = new BatchNormalization().Set(forthLayer);
-            forthLayer = new Keras.Layers.Add(new BaseLayer[] { forthLayer, thirdLayer });
-            forthLayer = new Activation("relu").Set(forthLayer);
-
-            var fifthLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(forthLayer);
-            fifthLayer = new BatchNormalization().Set(fifthLayer);
-            fifthLayer = new Activation("relu").Set(fifthLayer);
-            fifthLayer = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(fifthLayer);
-            fifthLayer = new BatchNormalization().Set(fifthLayer);
-            fifthLayer = new Keras.Layers.Add(new BaseLayer[] { fifthLayer, forthLayer });
-            fifthLayer = new Activation("relu").Set(fifthLayer);
-
-            var resLayer6 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(fifthLayer);
-            resLayer6 = new BatchNormalization().Set(resLayer6);
-            resLayer6 = new Activation("relu").Set(resLayer6);
-            resLayer6 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer6);
-            resLayer6 = new BatchNormalization().Set(resLayer6);
-            resLayer6 = new Keras.Layers.Add(new BaseLayer[] { resLayer6, fifthLayer });
-            resLayer6 = new Activation("relu").Set(resLayer6);
-
-            var resLayer7 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer6);
-            resLayer7 = new BatchNormalization().Set(resLayer7);
-            resLayer7 = new Activation("relu").Set(resLayer7);
-            resLayer7 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer7);
-            resLayer7 = new BatchNormalization().Set(resLayer7);
-            resLayer7 = new Keras.Layers.Add(new BaseLayer[] { resLayer6, resLayer7 });
-            resLayer7 = new Activation("relu").Set(resLayer7);
-
-            var resLayer8 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer7);
-            resLayer8 = new BatchNormalization().Set(resLayer8);
-            resLayer8 = new Activation("relu").Set(resLayer8);
-            resLayer8 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer8);
-            resLayer8 = new BatchNormalization().Set(resLayer8);
-            resLayer8 = new Keras.Layers.Add(new BaseLayer[] { resLayer7, resLayer8 });
-            resLayer8 = new Activation("relu").Set(resLayer8);
-
-            var resLayer9 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer8);
-            resLayer9 = new BatchNormalization().Set(resLayer9);
-            resLayer9 = new Activation("relu").Set(resLayer9);
-            resLayer9 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer9);
-            resLayer9 = new BatchNormalization().Set(resLayer9);
-            resLayer9 = new Keras.Layers.Add(new BaseLayer[] { resLayer8, resLayer9 });
-            resLayer9 = new Activation("relu").Set(resLayer9);
-
-            var resLayer10 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer9);
-            resLayer10 = new BatchNormalization().Set(resLayer10);
-            resLayer10 = new Activation("relu").Set(resLayer10);
-            resLayer10 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer10);
-            resLayer10 = new BatchNormalization().Set(resLayer10);
-            resLayer10 = new Keras.Layers.Add(new BaseLayer[] { resLayer9, resLayer10 });
-            resLayer10 = new Activation("relu").Set(resLayer10);
-
-            var resLayer11 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer10);
-            resLayer11 = new BatchNormalization().Set(resLayer11);
-            resLayer11 = new Activation("relu").Set(resLayer11);
-            resLayer11 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer11);
-            resLayer11 = new BatchNormalization().Set(resLayer11);
-            resLayer11 = new Keras.Layers.Add(new BaseLayer[] { resLayer10, resLayer11 });
-            resLayer11 = new Activation("relu").Set(resLayer11);
-
-            var resLayer12 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer11);
-            resLayer12 = new BatchNormalization().Set(resLayer12);
-            resLayer12 = new Activation("relu").Set(resLayer12);
-            resLayer12 = new Conv2D(FILTERS_COUNT, (3, 3).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer12);
-            resLayer12 = new BatchNormalization().Set(resLayer12);
-            resLayer12 = new Keras.Layers.Add(new BaseLayer[] { resLayer11, resLayer12 });
-            resLayer12 = new Activation("relu").Set(resLayer12);
-
-            var policyOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resLayer12);
+            var policyOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resBlock);
             policyOutput = new BatchNormalization().Set(policyOutput);
             policyOutput = new Activation("relu").Set(policyOutput);
             policyOutput = new Flatten().Set(policyOutput);
             policyOutput = new Dense(Constants.DEFAULT_BOARD_SIZE * Constants.DEFAULT_BOARD_SIZE, activation: "softmax", name: "policy_net").Set(policyOutput);
 
-            var valueOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last").Set(resLayer12);
+            var valueOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last").Set(resBlock);
             valueOutput = new BatchNormalization().Set(valueOutput);
             valueOutput = new Activation("relu").Set(valueOutput);
             valueOutput = new Flatten().Set(valueOutput);
@@ -226,81 +149,6 @@ namespace GomokuNN.Sources
             network.Save(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
             network.SaveOnnx(String.Format("{0}_{1}_{2}.keras.onnx", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, resultGeneration));
         }
-
-            //private IGameEstimator createAgent(ref IGameEstimator previousAgent, AgentType agentType, int agentColor, bool isTraining, int networkGeneration, IGameBoardState state)
-            //{
-            //    if (agentType == AgentType.CNN)
-            //    {
-            //        var agent = new CNNEstimator(isTraining);
-            //        agent.LoadModel(String.Format("{0}_{1}_{2}.keras", Constants.MODEL_NAME, Constants.DEFAULT_BOARD_SIZE, networkGeneration));
-            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
-
-            //        return agent;
-            //    }
-            //    else if (agentType == AgentType.MCTS)
-            //    {
-            //        var agent = new MCTSEstimator();
-            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
-
-            //        return agent;
-            //    }
-            //    else
-            //    {
-
-            //        var agent = new RandomEstimator();
-            //        agent.InitFromState(_gameBoard.GetBoardState(), Constants.CROSS_COLOR, agentColor);
-
-            //        return agent;
-            //    }
-            //}
-
-            //public void TrainNetworkOnSelfPlayData()
-            //{
-            //    if (_agent1Type == AgentType.CNN && _agent2Type == AgentType.CNN)
-            //    {
-            //        if (_agent1Won > _agent2Won)
-            //        {
-            //            NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
-
-            //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-            //            _agent1NetworkGeneration = _latestNetworkGeneration;
-            //            _agent2NetworkGeneration = _latestNetworkGeneration;
-            //        }
-            //        else
-            //        {
-            //            NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
-
-            //            _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-            //            _agent1NetworkGeneration = _latestNetworkGeneration;
-            //            _agent2NetworkGeneration = _latestNetworkGeneration;
-            //        }
-
-            //    }
-            //    else if (_agent1Type == AgentType.CNN)
-            //    {
-            //        NetworkTrainer.Train(_agent1NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
-
-            //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-            //        _agent1NetworkGeneration = _latestNetworkGeneration;
-            //        _agent2NetworkGeneration = _latestNetworkGeneration;
-            //    }
-            //    else if (_agent1Type == AgentType.CNN)
-            //    {
-            //        NetworkTrainer.Train(_agent2NetworkGeneration, Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1), ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
-
-            //        _latestNetworkGeneration = Math.Max(_agent1NetworkGeneration + 1, _agent2NetworkGeneration + 1);
-            //        _agent1NetworkGeneration = _latestNetworkGeneration;
-            //        _agent2NetworkGeneration = _latestNetworkGeneration;
-            //    }
-            //    else
-            //    {
-            //        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.1f, 32, _trainingEpochCount);
-
-            //        _latestNetworkGeneration = _latestNetworkGeneration + 1;
-            //        _agent1NetworkGeneration = _latestNetworkGeneration;
-            //        _agent2NetworkGeneration = _latestNetworkGeneration;
-            //    }
-            //}
 
         public void Run()
         {
@@ -547,7 +395,7 @@ namespace GomokuNN.Sources
 
                 if (ImGui.Button("Train on game files"))
                 {
-                    var _latestNetworkGeneration = 75;
+                    var _latestNetworkGeneration = 0;
                     HashSet<long> knownPositions = new HashSet<long>();
                     _trainingSamples.Clear();
 
@@ -613,12 +461,12 @@ namespace GomokuNN.Sources
                                 TrainingSample.FillFromGameHistory(ref _trainingSamples, gameHistories[gameIndex], ref knownPositions);
                             }
 
-                            if (_trainingSamples.Count > 2000000)
+                            if (_trainingSamples.Count > 100000)
                             {
                                 Console.WriteLine("Training with " + sample + " sample...");
                                 Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                                NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
+                                NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 1024, 6);
 
                                 _trainingSamples.Clear();
 
@@ -626,12 +474,12 @@ namespace GomokuNN.Sources
                             }
                         }
 
-                        if (_trainingSamples.Count > 2000000)
+                        if (_trainingSamples.Count > 100000)
                         {
                             Console.WriteLine("Training with " + sample + " sample...");
                             Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                            NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
+                            NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 1024, 6);
 
                             _trainingSamples.Clear();
 
@@ -643,7 +491,7 @@ namespace GomokuNN.Sources
                     {
                         Console.WriteLine("Board positions count: " + _trainingSamples.Count);
 
-                        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 4096, 4);
+                        NetworkTrainer.Train(_latestNetworkGeneration, _latestNetworkGeneration + 1, ref _trainingSamples, 0.2f, 1024, 6);
 
                         _trainingSamples.Clear();
                     }
