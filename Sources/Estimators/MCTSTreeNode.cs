@@ -8,6 +8,7 @@ namespace GomokuNN.Sources.Estimators
 {
     internal class MCTSTreeNode
     {
+        public int NodeDepth { get; set; }
         public int PlayoutsCount { get; set; }
         public float PlayoutScore { get; set; }
         public float WinProbability { get; set; }

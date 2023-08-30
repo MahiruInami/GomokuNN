@@ -30,6 +30,8 @@ namespace GomokuNN.Sources
                     availableModels.Add(modelPath);
                 }
             }
+
+            availableModels.Sort();
         }
     }
 }

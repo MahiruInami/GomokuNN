@@ -11,7 +11,10 @@ namespace GomokuNN.Sources
     internal class AIGym
     {
         List<GymParticipant> _baseLines = new List<GymParticipant>();
+        List<TrainingSample> _trainingSamples = new List<TrainingSample>();
         HashSet<long> _knownPositions = new HashSet<long>();
+
+        private readonly object lockGuard = new object();
 
         public AIGym() { }
 
@@ -25,197 +28,273 @@ namespace GomokuNN.Sources
             _baseLines.RemoveAll(participant => participant.id == id);
         }
 
+        private List<TrainingSample> SelfPlay(GymParticipant agentSettings)
+        {
+            var gameSettings = new GameSettings();
+            var gameController = new GameController(gameSettings);
+            gameController.StartGame();
+
+            var gameAgent = new CNNEstimator(true);
+            gameAgent.LoadModel(agentSettings.agent.modelPath);
+            gameAgent.InitFromState(gameController.gameBoard.GetBoardState(), Constants.CROSS_COLOR, Constants.CROSS_COLOR);
+
+            while (!gameController.IsGameEnded())
+            {
+                while (gameAgent.GetCurrentPlayoutsCount() < agentSettings.agent.playoutsCount)
+                {
+                    gameAgent.EstimateOnce();
+                }
+
+                if (gameAgent.GetCurrentPlayoutsCount() >= agentSettings.agent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                {
+                    var color = gameController.gameBoard.GetCurrentTurnColor();
+                    var bestMove = gameAgent.GetBestMove();
+                    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    {
+                        gameAgent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
+                    }
+                }
+
+                if (gameAgent.GetCurrentPlayoutsCount() >= agentSettings.agent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                {
+                    var color = gameController.gameBoard.GetCurrentTurnColor();
+                    var bestMove = gameAgent.GetBestMove();
+                    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    {
+                        gameAgent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
+                    }
+                }
+            }
+
+            if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN)
+            {
+                List<TrainingSample> result;
+                lock (lockGuard)
+                {
+                    result = gameAgent.GetTrainingSamples(gameController.gameBoard.GetCurrentTurnColor(), ref _knownPositions);
+                }
+
+                return result;
+            }
+
+            if (gameController.gameBoard.GetGameState() == Constants.GameResult.TIE)
+            {
+                List<TrainingSample> result;
+                lock (lockGuard)
+                {
+                    result = gameAgent.GetTrainingSamples(Constants.EMPTY_COLOR, ref _knownPositions);
+                }
+
+                return result;
+            }
+
+            return new List<TrainingSample>();
+        }
+
+        private int EstimationPlay(GymParticipant agent1, GymParticipant agent2)
+        {
+            var gameSettings = new GameSettings();
+            gameSettings.firstAgent = agent1.agent;
+            gameSettings.secondAgent = agent2.agent;
+
+            gameSettings.firstAgent.isTraining = false;
+            gameSettings.secondAgent.isTraining = false;
+
+            var gameController = new GameController(gameSettings);
+            gameController.CreateEstimators();
+            gameController.StartGame();
+
+            while (!gameController.IsGameEnded())
+            {
+                if (gameController.firstAgent != null && !gameController.firstAgent.HasContiniousEstimationSupport())
+                {
+                    gameController.firstAgent.EstimateOnce();
+                }
+                if (gameController.secondAgent != null && !gameController.secondAgent.HasContiniousEstimationSupport())
+                {
+                    gameController.secondAgent.EstimateOnce();
+                }
+
+                if (gameController.firstAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.firstAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                {
+                    var bestMove = gameController.firstAgent.GetBestMove();
+                    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    {
+                    }
+                }
+
+                if (gameController.secondAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.secondAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                {
+                    var bestMove = gameController.secondAgent.GetBestMove();
+                    if (gameController.MakeMove(bestMove.X, bestMove.Y))
+                    {
+                    }
+                }
+            }
+
+            if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN)
+            {
+                return gameController.gameBoard.GetCurrentTurnColor();
+            }
+
+            return 0;
+        }
+
         public int TrainAgent(int startingGeneration)
         {
             GymParticipant currentAgent = new GymParticipant()
             {
                 id = 1000,
-                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 20, 2.0f)
+                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 400, 1.1f)
             };
 
             // start selfplay session
-            var rnd = new Random();
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            var samples = new List<TrainingSample>();
+            
             const int TRAINING_GAMES_COUNT = 2000;
-            for (int gameIndex = 0; samples.Count < 40000; gameIndex++)
+            const int BATCH_SIZE = 1024;
+            const int EPOCHS = 1;
+            const int OVERFIT_EXIT_INTERVAL = 100;
+            const int LOG_INTERVAL = 10;
+            const int THREADS_COUNT = 24;
+            int currentOverfitIntervalIndex = 0;
+            int currentLogIntervalIndex = 0;
+
+            int runSamplesCount = 0;
+            int newSamplesDiscovered = 0;
+            for (int gameIndex = 0;;)
             {
-                var gameSettings = new GameSettings();
+                if (runSamplesCount > BATCH_SIZE * 10)
+                {
+                    Console.WriteLine("Target games count reached");
+                    Console.WriteLine("Samples count: " + runSamplesCount);
+                    Console.WriteLine("Known positions count: " + _knownPositions.Count);
+                    break;
+                }
 
-                //gameSettings.firstAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
-                //gameSettings.secondAgent = new GameAgentSettings(currentAgent.agent.type, currentAgent.agent.modelPath, currentAgent.agent.playoutsCount, currentAgent.agent.explorationRate, true);
+                if (runSamplesCount > BATCH_SIZE && gameIndex > TRAINING_GAMES_COUNT)
+                {
+                    break;
+                }
 
-                if (gameIndex % 10 == 0)
+                if (currentOverfitIntervalIndex >= OVERFIT_EXIT_INTERVAL && runSamplesCount > 0)
+                {
+                    if (newSamplesDiscovered < 50)
+                    {
+                        //_knownPositions.Clear();
+                        break;
+                    }
+
+                    newSamplesDiscovered = 0;
+                    currentOverfitIntervalIndex = 0;
+                }
+
+                if (currentLogIntervalIndex >= LOG_INTERVAL)
                 {
                     Console.WriteLine("Starting trainging game " + gameIndex);
-                    Console.WriteLine("Samples count: " + samples.Count);
+                    Console.WriteLine("Samples count: " + runSamplesCount);
                     Console.WriteLine("Known positions count: " + _knownPositions.Count);
+
+                    currentLogIntervalIndex = 0;
                 }
-                var gameController = new GameController(gameSettings);
-                gameController.StartGame();
 
-                var agent = new CNNEstimator(true);
-                agent.LoadModel(currentAgent.agent.modelPath);
-                agent.InitFromState(gameController.gameBoard.GetBoardState(), Constants.CROSS_COLOR, Constants.CROSS_COLOR);
-
-                int playoutsCount = 2;// rnd.Next(currentAgent.agent.playoutsCount);
-                while (!gameController.IsGameEnded())
+                List<Task<List<TrainingSample>>> selfPlayTasks = new List<Task<List<TrainingSample>>>();
+                for (int i = 0; i < THREADS_COUNT; i++)
                 {
-                    //if (gameController.firstAgent != null && !gameController.firstAgent.HasContiniousEstimationSupport())
-                    //{
-                    //    gameController.firstAgent.EstimateOnce();
-                    //}
-                    //if (gameController.secondAgent != null && !gameController.secondAgent.HasContiniousEstimationSupport())
-                    //{
-                    //    gameController.secondAgent.EstimateOnce();
-                    //}
-
-                    //if (gameController.firstAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.firstAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                    //{
-                    //    var bestMove = gameController.firstAgent.GetBestMove();
-                    //    if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                    //    {
-                    //    }
-                    //}
-
-                    //if (gameController.secondAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.secondAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                    //{
-                    //    var bestMove = gameController.secondAgent.GetBestMove();
-                    //    if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                    //    {
-                    //    }
-                    //}
-
-                    agent.EstimateOnce();
-                    if (agent.GetCurrentPlayoutsCount() > playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                    selfPlayTasks.Add(Task.Factory.StartNew(() =>
                     {
-                        var color = gameController.gameBoard.GetCurrentTurnColor();
-                        var bestMove = agent.GetBestMove();
-                        if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                        {
-                            agent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
-                        }
-                    }
-
-                    if (agent.GetCurrentPlayoutsCount() > playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                    {
-                        var color = gameController.gameBoard.GetCurrentTurnColor();
-                        var bestMove = agent.GetBestMove();
-                        if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                        {
-                            agent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
-                        }
-                    }
+                        return SelfPlay(currentAgent);
+                    }));
                 }
 
-                if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                Task.WaitAll(selfPlayTasks.ToArray());
+
+                for (int i = 0; i < THREADS_COUNT; i++)
                 {
-                    var gameSamples = agent.GetTrainingSamples(Constants.CROSS_COLOR, ref _knownPositions);
-                    samples.AddRange(gameSamples);
+                    _trainingSamples.AddRange(selfPlayTasks[i].Result);
+                    runSamplesCount += selfPlayTasks[i].Result.Count;
+                    newSamplesDiscovered += selfPlayTasks[i].Result.Count;
                 }
 
-                if (gameController.gameBoard.GetGameState() == Constants.GameResult.WIN && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                {
-                    var gameSamples = agent.GetTrainingSamples(Constants.ZERO_COLOR, ref _knownPositions);
-                    samples.AddRange(gameSamples);
-                }
+                gameIndex += THREADS_COUNT;
+                currentOverfitIntervalIndex += THREADS_COUNT;
+                currentLogIntervalIndex += THREADS_COUNT;
             }
 
             watch.Stop();
             Console.WriteLine("Self-play time: " + watch.ElapsedMilliseconds / 1000.0);
 
-            NetworkTrainer.Train(startingGeneration, startingGeneration + 1, ref samples, 0.2f, 4096, 1);
+            NetworkTrainer.Train(startingGeneration, startingGeneration + 1, ref _trainingSamples, 0.2f, BATCH_SIZE, EPOCHS);
 
-            _baseLines.Add(currentAgent);
+            //_baseLines.Add(currentAgent);
 
-            var newGenerationAgent = new GymParticipant()
-            {
-                id = 10000,
-                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration + 1), 100, 2.0f)
-            };
+            //var newGenerationAgent = new GymParticipant()
+            //{
+            //    id = 10000,
+            //    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration + 1), 2500, 1.0f)
+            //};
 
-            int[] wonGamesCount = new int[_baseLines.Count];
-            int[] losesGamesCount = new int[_baseLines.Count];
-            const int GYM_GAMES_COUNT = 4;
-            for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
-            {
-                wonGamesCount[agentIndex] = 0;
-                for (int gameIndex = 0; gameIndex < GYM_GAMES_COUNT; gameIndex++)
-                {
-                    bool newNetFirst = gameIndex % 2 == 0;
-                    var gameSettings = new GameSettings();
-                    gameSettings.firstAgent = newNetFirst ? newGenerationAgent.agent : _baseLines[agentIndex].agent;
-                    gameSettings.secondAgent = newNetFirst ? _baseLines[agentIndex].agent : newGenerationAgent.agent;
+            //Console.WriteLine("Starting estimation games for new network " + newGenerationAgent.agent.modelPath);
+            //int[] wonGamesCount = new int[_baseLines.Count];
+            //int[] losesGamesCount = new int[_baseLines.Count];
+            //const int GYM_GAMES_COUNT = 4;
+            //List<Task<int>> estimationPlayTasks = new List<Task<int>>();
+            //for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
+            //{
+            //    wonGamesCount[agentIndex] = 0;
+            //    for (int gameIndex = 0; gameIndex < GYM_GAMES_COUNT; gameIndex++)
+            //    {
+            //        bool newNetFirst = gameIndex % 2 == 0;
 
-                    gameSettings.firstAgent.isTraining = false;
-                    gameSettings.secondAgent.isTraining = false;
+            //        var agent1 = newNetFirst ? newGenerationAgent : _baseLines[agentIndex];
+            //        var agent2 = newNetFirst ? _baseLines[agentIndex] : newGenerationAgent;
 
-                    gameSettings.firstAgent.playoutsCount = 100;
-                    gameSettings.secondAgent.playoutsCount = 100;
+            //        Console.WriteLine("Starting game estimation game " + gameIndex + " vs " + _baseLines[agentIndex].agent.modelPath);
+            //        estimationPlayTasks.Add(Task.Factory.StartNew(() =>
+            //        {
+            //            return EstimationPlay(agent1, agent2);
+            //        }));
+            //    }
+            //}
 
-                    Console.WriteLine("Starting game estimation game " + gameIndex);
-                    var gameController = new GameController(gameSettings);
-                    gameController.CreateEstimators();
-                    gameController.StartGame();
+            //Task.WaitAll(estimationPlayTasks.ToArray());
+            //for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
+            //{
+            //    for (int gameIndex = 0; gameIndex < GYM_GAMES_COUNT; gameIndex++)
+            //    {
+            //        var gameResult = estimationPlayTasks[agentIndex * GYM_GAMES_COUNT + gameIndex].Result;
+            //        bool newNetFirst = gameIndex % 2 == 0;
+            //        if (gameResult == Constants.CROSS_COLOR && newNetFirst)
+            //        {
+            //            wonGamesCount[agentIndex]++;
+            //        }
 
-                    while (!gameController.IsGameEnded())
-                    {
-                        if (gameController.firstAgent != null && !gameController.firstAgent.HasContiniousEstimationSupport())
-                        {
-                            gameController.firstAgent.EstimateOnce();
-                        }
-                        if (gameController.secondAgent != null && !gameController.secondAgent.HasContiniousEstimationSupport())
-                        {
-                            gameController.secondAgent.EstimateOnce();
-                        }
+            //        if (gameResult == Constants.CROSS_COLOR && !newNetFirst)
+            //        {
+            //            losesGamesCount[agentIndex]++;
+            //        }
 
-                        if (gameController.firstAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.firstAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                        {
-                            var bestMove = gameController.firstAgent.GetBestMove();
-                            if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                            }
-                        }
+            //        if (gameResult == Constants.ZERO_COLOR && !newNetFirst)
+            //        {
+            //            wonGamesCount[agentIndex]++;
+            //        }
 
-                        if (gameController.secondAgent?.GetCurrentPlayoutsCount() > gameController.gameSettings.secondAgent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                        {
-                            var bestMove = gameController.secondAgent.GetBestMove();
-                            if (gameController.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                            }
-                        }
-                    }
+            //        if (gameResult == Constants.ZERO_COLOR && newNetFirst)
+            //        {
+            //            losesGamesCount[agentIndex]++;
+            //        }
+            //    }
+            //}
 
-                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR && newNetFirst)
-                    {
-                        wonGamesCount[agentIndex]++;
-                    }
+            //for (int i = 0; i < wonGamesCount.Length; i++)
+            //{
+            //    int draws = GYM_GAMES_COUNT - wonGamesCount[i] - losesGamesCount[i];
+            //    Console.WriteLine("Winrate against " + CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath) + ": " + wonGamesCount[i] + " " + losesGamesCount[i] + " " + draws);
+            //}
+            //_baseLines.RemoveAt(_baseLines.Count - 1);
 
-                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR && !newNetFirst)
-                    {
-                        losesGamesCount[agentIndex]++;
-                    }
-
-                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR && !newNetFirst)
-                    {
-                        wonGamesCount[agentIndex]++;
-                    }
-
-                    if (gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR && newNetFirst)
-                    {
-                        losesGamesCount[agentIndex]++;
-                    }
-                }
-            }
-
-            for (int i = 0; i < wonGamesCount.Length; i++)
-            {
-                int draws = GYM_GAMES_COUNT - wonGamesCount[i] - losesGamesCount[i];
-                Console.WriteLine("Winrate against " + CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath) + ": " + wonGamesCount[i] + " " + losesGamesCount[i] + " " + draws);
-            }
-            _baseLines.RemoveAt(_baseLines.Count - 1);
-            _knownPositions.Clear();
+            //_knownPositions.Clear();
 
             return startingGeneration + 1;
         }

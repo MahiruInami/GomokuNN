@@ -1,4 +1,6 @@
 ﻿using ImGuiNET;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -40,12 +42,20 @@ namespace GomokuNN.Sources.Estimators
         Task? _estimationTask = null;
         Random _rndGenerator = new Random();
 
+        DenseTensor<float> _inputTensor;
+        InferenceSession? _inferenceSession = null;
+
         bool _debugDrawBestMove = false;
 
         int _currentMoveColor = 0;
 
         public void InitFromState(IGameBoardState state, int initialColor, int estimatorColor)
         {
+            _inferenceSession = CNNModelCache.Instance.LoadModel(CNNHelper.GetCNNPathByGeneration(6) + ".onnx");
+            float[] inputData = new float[state.GetBoardSize() * state.GetBoardSize() * 4];
+            Array.Fill(inputData, 0);
+            _inputTensor = new DenseTensor<float>(inputData, new int[] { 1, 4, state.GetBoardSize(), state.GetBoardSize() });
+
             var boardSize = state.GetBoardSize();
             _state.Init(boardSize);
             for (int x = 0; x < boardSize; x++)
@@ -59,15 +69,6 @@ namespace GomokuNN.Sources.Estimators
 
             _movesHistory.Clear();
             _currentMoveColor = initialColor;
-
-            for (int i = 0; i < 40; i++)
-            {
-                var val = _rndGenerator.NextDouble();
-                if (val < 0.05)
-                {
-                    Console.WriteLine("HIT!");
-                }
-            }
         }
 
 
@@ -145,7 +146,7 @@ namespace GomokuNN.Sources.Estimators
                 while (_isEstimationInProgress && !_isEvaluationDone)
                 {
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    Negamax(_state, 7);
+                    Negamax(_state, 3);
 
                     watch.Stop();
                     Console.WriteLine("Estimation time: " + watch.ElapsedMilliseconds);
@@ -219,7 +220,7 @@ namespace GomokuNN.Sources.Estimators
 
                 //Console.WriteLine(new String('=', 1) + "Start: " + movesPolicy.GetUnhashedPositionX(position) + " " + movesPolicy.GetUnhashedPositionY(position) + " " + _currentMoveColor + " " + currentDepth);
 
-                var value = -SearchIteration(searchState, movesPolicy, zobristHash, movesPolicy.GetUnhashedPositionX(position), movesPolicy.GetUnhashedPositionY(position), alpha, beta, _currentMoveColor, currentDepth);
+                var value = -SearchIteration(searchState, movesPolicy, zobristHash, movesPolicy.GetUnhashedPositionX(position), movesPolicy.GetUnhashedPositionY(position), -1, -1, alpha, beta, _currentMoveColor, currentDepth);
 
 
                 var after = searchState.GetBoardStateHash();
@@ -237,7 +238,7 @@ namespace GomokuNN.Sources.Estimators
             return moveValue;
         }
 
-        private float SearchIteration(ArrayGameBoardState boardState, IncrementalMovesPolicy movesPolicy, Dictionary<long, TranspositionTableNode> zobristHash, int x, int y, float alpha, float beta, int color, int currentDepth)
+        private float SearchIteration(ArrayGameBoardState boardState, IncrementalMovesPolicy movesPolicy, Dictionary<long, TranspositionTableNode> zobristHash, int x, int y, int prevX, int prevY, float alpha, float beta, int color, int currentDepth)
         {
             if (_cancellationToken != null && _cancellationToken.Value.IsCancellationRequested)
             {
@@ -251,7 +252,26 @@ namespace GomokuNN.Sources.Estimators
 
                 //Console.WriteLine(new String('-', 6 - currentDepth) + "Exit: " + x + " " + y + " " + color + " " + currentDepth);
                 //Console.WriteLine(new String('-', 6 - currentDepth) + "Score: " + 0);
-                return 0.0f;
+
+                float[] inputData = new float[boardState.GetBoardSize() * boardState.GetBoardSize() * 4];
+                int boardOffset = _state.GetBoardSize() * _state.GetBoardSize();
+
+                for (int i = 0; i < _state.GetBoardSize() * _state.GetBoardSize(); i++)
+                {
+                    var value = _state.GetRawCellState(i);
+                    _inputTensor.SetValue(i, value == Constants.CROSS_COLOR ? 1 : 0);
+                    _inputTensor.SetValue(i + boardOffset, value == Constants.ZERO_COLOR ? 1 : 0);
+                    _inputTensor.SetValue(i + boardOffset * 2, 0);
+                    _inputTensor.SetValue(i + boardOffset * 3, color == Constants.CROSS_COLOR ? 1 : 0);
+                }
+
+                _inputTensor.SetValue(boardOffset * 2 + boardState.GetPositionHash(prevX, prevY), 1);
+
+                var modelInput = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor<float>("input_layer", _inputTensor) };
+                var output = _inferenceSession.Run(modelInput).ToArray();
+                var valueOutput = output[1].AsTensor<float>();
+
+                return valueOutput[0];
             }
 
             boardState.SetCellState(x, y, color);
@@ -288,7 +308,7 @@ namespace GomokuNN.Sources.Estimators
                 //    continue;
                 //}
 
-                var value = -SearchIteration(boardState, movesPolicy, zobristHash, movesPolicy.GetUnhashedPositionX(position), movesPolicy.GetUnhashedPositionY(position), -beta, -alpha, Constants.RotateColor(color), currentDepth - 1);
+                var value = -SearchIteration(boardState, movesPolicy, zobristHash, movesPolicy.GetUnhashedPositionX(position), movesPolicy.GetUnhashedPositionY(position), x, y, -beta, -alpha, Constants.RotateColor(color), currentDepth - 1);
                 moveValue = Math.Max(moveValue, value);
 
                 alpha = Math.Max(alpha, moveValue);

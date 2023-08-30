@@ -108,7 +108,7 @@ namespace GomokuNN.Sources
             netLayer = new Activation("relu").Set(netLayer);
 
             var resBlock = netLayer;
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 1; i++)
             {
                 resBlock = AddResidualBlock(FILTERS_COUNT, resBlock);
             }
@@ -160,8 +160,6 @@ namespace GomokuNN.Sources
 
         public void Run()
         {
-            //SetupModel();
-
             Raylib.InitWindow(1280, 768, "TEST");
 
             rlImGui.Setup(true);
@@ -177,10 +175,6 @@ namespace GomokuNN.Sources
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(Color.RAYWHITE);
 
-                if (_currentGame != null)
-                {
-                    //_currentGameInfo.DrawBoard();
-                }
                 for (int y = 0; y < Constants.DEFAULT_BOARD_SIZE; y++)
                 {
                     for (int x = 0; x < Constants.DEFAULT_BOARD_SIZE; x++)
@@ -400,6 +394,10 @@ namespace GomokuNN.Sources
                 //    }
                 //}
 
+                if (ImGui.Button("Recreate Model"))
+                {
+                    SetupModel();
+                }
 
                 if (ImGui.Button("Train on game files"))
                 {
@@ -469,7 +467,7 @@ namespace GomokuNN.Sources
                                 TrainingSample.FillFromGameHistory(ref _trainingSamples, gameHistories[gameIndex], ref knownPositions);
                             }
 
-                            if (_trainingSamples.Count > 100000)
+                            if (_trainingSamples.Count > 1000000)
                             {
                                 Console.WriteLine("Training with " + sample + " sample...");
                                 Console.WriteLine("Board positions count: " + _trainingSamples.Count);
@@ -482,7 +480,7 @@ namespace GomokuNN.Sources
                             }
                         }
 
-                        if (_trainingSamples.Count > 100000)
+                        if (_trainingSamples.Count > 1000000)
                         {
                             Console.WriteLine("Training with " + sample + " sample...");
                             Console.WriteLine("Board positions count: " + _trainingSamples.Count);
@@ -512,11 +510,13 @@ namespace GomokuNN.Sources
                     //gym.AddBaseLineParticipant(new GymParticipant()
                     //{
                     //    id = 1,
-                    //    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(1), 2, 2.0f)
+                    //    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(10), 2500, 2.0f)
                     //});
 
                     //int trainingAgent = 97;
-                    int trainingAgent = 71;
+                    //SetModelLearningRate(6, 7, 0.0001f);
+
+                    int trainingAgent = 99;
                     for (int i = 0; i < 100; i++)
                     {
                         trainingAgent = gym.TrainAgent(trainingAgent);
@@ -684,21 +684,6 @@ namespace GomokuNN.Sources
                     _newGameSettings.secondAgent.playoutsCount = secondAgentPlayouts;
                 }
 
-                if (ImGui.Button("Estimate once"))
-                {
-                    //    _estimator.Estimate(1);
-                }
-
-                if (ImGui.Button("Restart estimation"))
-                {
-                    //    _estimator.InitFromState(_gameBoard.GetBoardState(), _gameBoard.GetCurrentTurnColor(), _gameBoard.GetCurrentTurnColor());
-                }
-
-                //if (ImGui.SliderFloat("Exploration rate", ref _explorationRate, 0.1f, 2.0f))
-                //{
-                //    _estimator.SetExplorationConst(_explorationRate);
-                //}
-
                 if (ImGui.TreeNode("First agent debug data"))
                 {
                     _currentGame?.firstAgent?.DebugMenuDraw(ref _currentGame.gameBoard);
@@ -748,23 +733,23 @@ namespace GomokuNN.Sources
                             }
                         }
 
-                        //if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                        //{
-                        //    var bestMove = _currentGame.firstAgent.GetBestMove();
-                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                        //    {
-                        //        _lastMovePosition = bestMove;
-                        //    }
-                        //}
+                        if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                        {
+                            var bestMove = _currentGame.firstAgent.GetBestMove();
+                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                            {
+                                _lastMovePosition = bestMove;
+                            }
+                        }
 
-                        //if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                        //{
-                        //    var bestMove = _currentGame.secondAgent.GetBestMove();
-                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                        //    {
-                        //        _lastMovePosition = bestMove;
-                        //    }
-                        //}
+                        if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                        {
+                            var bestMove = _currentGame.secondAgent.GetBestMove();
+                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                            {
+                                _lastMovePosition = bestMove;
+                            }
+                        }
                     }
                 }
 
