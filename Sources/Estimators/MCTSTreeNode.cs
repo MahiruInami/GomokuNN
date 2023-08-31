@@ -12,6 +12,8 @@ namespace GomokuNN.Sources.Estimators
         public int PlayoutsCount { get; set; }
         public float PlayoutScore { get; set; }
         public float WinProbability { get; set; }
+
+        public float InitialWinProbability { get; set; }
         public float PolicyProbability { get; set; }
 
         public bool IsTerminal { get; set; }

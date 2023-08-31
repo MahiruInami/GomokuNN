@@ -11,6 +11,8 @@ namespace GomokuNN.Sources
 {
     internal class TrainingSample
     {
+        public long positionHash;
+
         public int[] input;
         public float[] networkOutput;
         public float valueOutput;

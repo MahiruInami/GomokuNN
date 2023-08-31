@@ -107,6 +107,39 @@ namespace Keras.Models
         }
 
         /// <summary>
+        ///Configures the model for training.
+        /// </summary>
+        /// <param name="optimizer"> String (name of optimizer) or optimizer instance. See optimizers.</param>
+        /// <param name="loss"> List of Strings (name of objective function) or objective function. See losses. If the model has multiple outputs, you can use a different loss on each output by passing a dictionary or a list of losses. The loss value that will be minimized by the model will then be the sum of all individual losses.</param>
+        /// <param name="metrics"> List of metrics to be evaluated by the model during training and testing. Typically you will use metrics=['accuracy']. To specify different metrics for different outputs of a multi-output model, you could also pass a dictionary, such as metrics={'output_a': 'accuracy'}.</param>
+        /// <param name="loss_weights"> Optional list or dictionary specifying scalar coefficients (Python floats) to weight the loss contributions of different model outputs. The loss value that will be minimized by the model will then be the weighted sum of all individual losses, weighted by the loss_weightscoefficients. If a list, it is expected to have a 1:1 mapping to the model's outputs. If a tensor, it is expected to map output names (strings) to scalar coefficients.</param>
+        /// <param name="weighted_metrics"> List of metrics to be evaluated and weighted by sample_weight or class_weight during training and testing.</param>
+        /// <param name="run_eagerly"> Bool. Defaults to False. If True, this Model's logic will not be wrapped in a tf.function. Recommended to leave this as None unless your Model cannot be run inside a tf.function. run_eagerly=True is not supported when using.</param>
+        /// <param name="steps_per_execution"> Int. Defaults to 1. The number of batches to run during each tf.function call. Running multiple batches inside a single tf.function call can greatly improve performance on TPUs or small models with a large Python overhead. At most, one full epoch will be run each execution</param>
+        /// <param name="jit_compile"> If True, compile the model training step with XLA. XLA is an optimizing compiler for machine learning. jit_compile is not enabled for by default. Note that jit_compile=True may not necessarily work for all models.</param>
+        public void Compile(StringOrInstance optimizer, Dictionary<string, string> loss, string[] metrics = null, Dictionary<string, float> loss_weights = null,
+                      Dictionary<string, string> weighted_metrics = null, bool run_eagerly = false, int steps_per_execution = 1, bool jit_compile = false)
+        {
+            var args = new Dictionary<string, object>();
+            args["optimizer"] = optimizer;
+            args["loss"] = ToDict(loss);
+            args["metrics"] = metrics;
+            if (loss_weights != null)
+            {
+                args["loss_weights"] = ToDict(loss_weights);
+            }
+            if (weighted_metrics != null)
+            {
+                args["weighted_metrics"] = ToDict(weighted_metrics);
+            }
+            args["run_eagerly"] = run_eagerly;
+            args["steps_per_execution"] = steps_per_execution;
+            args["jit_compile"] = jit_compile;
+
+            InvokeMethod("compile", args);
+        }
+
+        /// <summary>
         /// Compute the total loss, validate it, and return it.
         /// Subclasses can optionally override this method to provide custom loss computation logic.
         /// </summary>

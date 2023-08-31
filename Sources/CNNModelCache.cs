@@ -12,6 +12,8 @@ namespace GomokuNN.Sources
         private static CNNModelCache _instance = null;
         private static readonly object _padlock = new object();
 
+        private static readonly object _modelLock = new object();
+
         CNNModelCache()
         {
         }
@@ -35,11 +37,14 @@ namespace GomokuNN.Sources
 
         public InferenceSession LoadModel(string path)
         {
-            if (!_models.ContainsKey(path)) 
+            lock (_modelLock)
             {
-                _models[path] = new InferenceSession(path);
-            }
+                if (!_models.ContainsKey(path))
+                {
+                    _models[path] = new InferenceSession(path);
+                }
 
+            }
             return _models[path];
         }
 

@@ -9,8 +9,8 @@ namespace GomokuNN.Sources
 {
     internal class Constants
     {
-        public const int DEFAULT_BOARD_SIZE = 9;
-        public const int CELLS_IN_ROW_TO_WIN = 5;
+        public const int DEFAULT_BOARD_SIZE = 6;
+        public const int CELLS_IN_ROW_TO_WIN = 4;
 
         public const int CELL_SIZE = 32;
         public const int BOARD_DRAW_OFFSET = 10;

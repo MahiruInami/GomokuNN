@@ -100,6 +100,7 @@ namespace GomokuNN.Sources
         private static void SetupModel()
         {
             const int FILTERS_COUNT = 128;
+            const int RES_BLOCKS_COUNT = 10;
 
             var inputLayer = new Input(shape: (4, Constants.DEFAULT_BOARD_SIZE, Constants.DEFAULT_BOARD_SIZE), name: "input_layer");
 
@@ -108,18 +109,18 @@ namespace GomokuNN.Sources
             netLayer = new Activation("relu").Set(netLayer);
 
             var resBlock = netLayer;
-            for (int i = 0; i < 1; i++)
+            for (int i = 0; i < RES_BLOCKS_COUNT; i++)
             {
                 resBlock = AddResidualBlock(FILTERS_COUNT, resBlock);
             }
 
-            var policyOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resBlock);
+            var policyOutput = new Conv2D(32, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last", strides: (1, 1).ToTuple()).Set(resBlock);
             policyOutput = new BatchNormalization().Set(policyOutput);
             policyOutput = new Activation("relu").Set(policyOutput);
             policyOutput = new Flatten().Set(policyOutput);
             policyOutput = new Dense(Constants.DEFAULT_BOARD_SIZE * Constants.DEFAULT_BOARD_SIZE, activation: "softmax", name: "policy_net").Set(policyOutput);
 
-            var valueOutput = new Conv2D(2, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last").Set(resBlock);
+            var valueOutput = new Conv2D(1, (1, 1).ToTuple(), activation: "relu", padding: "same", data_format: "channels_last").Set(resBlock);
             valueOutput = new BatchNormalization().Set(valueOutput);
             valueOutput = new Activation("relu").Set(valueOutput);
             valueOutput = new Flatten().Set(valueOutput);
@@ -131,9 +132,7 @@ namespace GomokuNN.Sources
 
             network.Compile(optimizer: new Keras.Optimizers.Adam(learning_rate: 0.001f),
                 loss: new Dictionary<string, string> { { "policy_net", "categorical_crossentropy" }, { "value_net", "mean_squared_error" } },
-                metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
-                weighted_metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
-                loss_weights: new Dictionary<string, float> { { "policy_net", 1.0f }, { "value_net", 1.0f } });
+                metrics: new string[] { "accuracy" });
             //network.Compile(optimizer: new Keras.Optimizers.Adam(learning_rate: 0.01f), loss: new string[] { "categorical_crossentropy", "mean_squared_error" }, metrics: new string[] { "categorical_accuracy", "accuracy" });
 
             network.Summary();
@@ -148,9 +147,7 @@ namespace GomokuNN.Sources
 
             network.Compile(optimizer: new Keras.Optimizers.Adam(learning_rate: rate),
                 loss: new Dictionary<string, string> { { "policy_net", "categorical_crossentropy" }, { "value_net", "mean_squared_error" } },
-                metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
-                weighted_metrics: new Dictionary<string, string> { { "policy_net", "categorical_accuracy" }, { "value_net", "accuracy" } },
-                loss_weights: new Dictionary<string, float> { { "policy_net", 1.0f }, { "value_net", 1.0f } });
+                metrics: new string[] { "accuracy" });
 
             network.Summary();
 
@@ -516,7 +513,7 @@ namespace GomokuNN.Sources
                     //int trainingAgent = 97;
                     //SetModelLearningRate(6, 7, 0.0001f);
 
-                    int trainingAgent = 99;
+                    int trainingAgent = 0;
                     for (int i = 0; i < 100; i++)
                     {
                         trainingAgent = gym.TrainAgent(trainingAgent);
@@ -708,14 +705,14 @@ namespace GomokuNN.Sources
                 {
                     if (_currentGame.isGameInProgress)
                     {
-                        if (_currentGame.firstAgent != null && !_currentGame.firstAgent.HasContiniousEstimationSupport())
-                        {
-                            _currentGame.firstAgent.EstimateOnce();
-                        }
-                        if (_currentGame.secondAgent != null && !_currentGame.secondAgent.HasContiniousEstimationSupport())
-                        {
-                            _currentGame.secondAgent.EstimateOnce();
-                        }
+                        //if (_currentGame.firstAgent != null && !_currentGame.firstAgent.HasContiniousEstimationSupport())
+                        //{
+                        //    _currentGame.firstAgent.EstimateOnce();
+                        //}
+                        //if (_currentGame.secondAgent != null && !_currentGame.secondAgent.HasContiniousEstimationSupport())
+                        //{
+                        //    _currentGame.secondAgent.EstimateOnce();
+                        //}
 
                         var position = Raylib.GetMousePosition();
                         if (Raylib.IsMouseButtonPressed(0))
@@ -733,23 +730,23 @@ namespace GomokuNN.Sources
                             }
                         }
 
-                        if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
-                        {
-                            var bestMove = _currentGame.firstAgent.GetBestMove();
-                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                                _lastMovePosition = bestMove;
-                            }
-                        }
+                        //if (_currentGame.firstAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.firstAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                        //{
+                        //    var bestMove = _currentGame.firstAgent.GetBestMove();
+                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                        //    {
+                        //        _lastMovePosition = bestMove;
+                        //    }
+                        //}
 
-                        if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
-                        {
-                            var bestMove = _currentGame.secondAgent.GetBestMove();
-                            if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
-                            {
-                                _lastMovePosition = bestMove;
-                            }
-                        }
+                        //if (_currentGame.secondAgent?.GetCurrentPlayoutsCount() > _currentGame.gameSettings.secondAgent.playoutsCount && _currentGame.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                        //{
+                        //    var bestMove = _currentGame.secondAgent.GetBestMove();
+                        //    if (_currentGame.MakeMove(bestMove.X, bestMove.Y))
+                        //    {
+                        //        _lastMovePosition = bestMove;
+                        //    }
+                        //}
                     }
                 }
 

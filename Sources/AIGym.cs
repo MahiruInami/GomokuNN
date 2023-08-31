@@ -1,5 +1,6 @@
 ﻿using GomokuNN.Sources.Estimators;
 using Raylib_cs;
+using Spectre.Console;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,9 +11,12 @@ namespace GomokuNN.Sources
 {
     internal class AIGym
     {
+        private readonly bool PLAY_VS_BASELINES_ENABLED = false;
+
         List<GymParticipant> _baseLines = new List<GymParticipant>();
         List<TrainingSample> _trainingSamples = new List<TrainingSample>();
         HashSet<long> _knownPositions = new HashSet<long>();
+        Random _rnd = new Random();
 
         private readonly object lockGuard = new object();
 
@@ -38,14 +42,15 @@ namespace GomokuNN.Sources
             gameAgent.LoadModel(agentSettings.agent.modelPath);
             gameAgent.InitFromState(gameController.gameBoard.GetBoardState(), Constants.CROSS_COLOR, Constants.CROSS_COLOR);
 
+            int playouts = agentSettings.agent.playoutsCount;
             while (!gameController.IsGameEnded())
             {
-                while (gameAgent.GetCurrentPlayoutsCount() < agentSettings.agent.playoutsCount)
+                while (gameAgent.GetCurrentPlayoutsCount() < playouts)
                 {
                     gameAgent.EstimateOnce();
                 }
 
-                if (gameAgent.GetCurrentPlayoutsCount() >= agentSettings.agent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
+                if (gameAgent.GetCurrentPlayoutsCount() >= playouts && gameController.gameBoard.GetCurrentTurnColor() == Constants.CROSS_COLOR)
                 {
                     var color = gameController.gameBoard.GetCurrentTurnColor();
                     var bestMove = gameAgent.GetBestMove();
@@ -53,9 +58,11 @@ namespace GomokuNN.Sources
                     {
                         gameAgent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
                     }
+
+                    playouts = _rnd.Next(10, 100);
                 }
 
-                if (gameAgent.GetCurrentPlayoutsCount() >= agentSettings.agent.playoutsCount && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
+                if (gameAgent.GetCurrentPlayoutsCount() >= playouts && gameController.gameBoard.GetCurrentTurnColor() == Constants.ZERO_COLOR)
                 {
                     var color = gameController.gameBoard.GetCurrentTurnColor();
                     var bestMove = gameAgent.GetBestMove();
@@ -63,6 +70,8 @@ namespace GomokuNN.Sources
                     {
                         gameAgent.SelectNextNode(bestMove.X, bestMove.Y, color, false);
                     }
+
+                    playouts = _rnd.Next(10, 100);
                 }
             }
 
@@ -142,34 +151,78 @@ namespace GomokuNN.Sources
 
         public int TrainAgent(int startingGeneration)
         {
+            AnsiConsole.MarkupLine("[chartreuse1]Training session for {0}[/]", startingGeneration);
+
             GymParticipant currentAgent = new GymParticipant()
             {
                 id = 1000,
-                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 400, 1.1f)
+                agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 100, 1.1f)
             };
 
             // start selfplay session
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            
-            const int TRAINING_GAMES_COUNT = 2000;
+            var progress = AnsiConsole.Progress();
+
+            const int MAX_TRAINING_SAMPLES_COUNT = 2000000;
+
+            const int TRAINING_GAMES_COUNT = 200;
+            const int MAX_SAMPLES_PER_ITERATION = 200000;
             const int BATCH_SIZE = 1024;
             const int EPOCHS = 1;
             const int OVERFIT_EXIT_INTERVAL = 100;
-            const int LOG_INTERVAL = 10;
-            const int THREADS_COUNT = 24;
+            const int LOG_INTERVAL = 512;
+            const int THREADS_COUNT = 48;
+            const int TRAINING_SAMPLE_SIZE = BATCH_SIZE * 20;
             int currentOverfitIntervalIndex = 0;
             int currentLogIntervalIndex = 0;
 
+            int gameIndex = 0;
             int runSamplesCount = 0;
             int newSamplesDiscovered = 0;
-            for (int gameIndex = 0;;)
+            bool selfPlayFinished = false;
+
+            var progressIndex = 0;
+            var progressTask = AnsiConsole.Progress().Columns(new ProgressColumn[]
             {
-                if (runSamplesCount > BATCH_SIZE * 10)
+                new TaskDescriptionColumn(),    // Task description
+                new ProgressBarColumn(),        // Progress bar
+                new PercentageColumn(),         // Percentage
+                new ElapsedTimeColumn()
+            }).StartAsync(async ctx =>
+            {
+                // Define tasks
+                var playedGamesProgressTask = ctx.AddTask("[yellow]Self-play[/]");
+                playedGamesProgressTask.MaxValue(TRAINING_GAMES_COUNT);
+
+                while (!ctx.IsFinished)
                 {
-                    Console.WriteLine("Target games count reached");
-                    Console.WriteLine("Samples count: " + runSamplesCount);
-                    Console.WriteLine("Known positions count: " + _knownPositions.Count);
+                    // Simulate some work
+                    await Task.Delay(250);
+
+                    // Increment
+                    if (progressIndex != gameIndex)
+                    {
+                        var diff = gameIndex - progressIndex;
+                        playedGamesProgressTask.Increment((float)diff);
+                        progressIndex = gameIndex;
+                    }
+
+                    if (selfPlayFinished)
+                    {
+                        playedGamesProgressTask.StopTask();
+                    }
+                }
+            });
+
+            for (gameIndex = 0;;)
+            {
+                
+                if (runSamplesCount > MAX_SAMPLES_PER_ITERATION)
+                {
+                    AnsiConsole.MarkupLine("[green]Target games count reached[/]");
+                    //AnsiConsole.MarkupLine("[green]New samples count: {0}[/]", runSamplesCount);
+                    //AnsiConsole.MarkupLine("[green]Known positions count: {0}[/]",  _knownPositions.Count);
                     break;
                 }
 
@@ -178,7 +231,7 @@ namespace GomokuNN.Sources
                     break;
                 }
 
-                if (currentOverfitIntervalIndex >= OVERFIT_EXIT_INTERVAL && runSamplesCount > 0)
+                if (currentOverfitIntervalIndex >= OVERFIT_EXIT_INTERVAL && gameIndex > 0)
                 {
                     if (newSamplesDiscovered < 50)
                     {
@@ -190,14 +243,14 @@ namespace GomokuNN.Sources
                     currentOverfitIntervalIndex = 0;
                 }
 
-                if (currentLogIntervalIndex >= LOG_INTERVAL)
-                {
-                    Console.WriteLine("Starting trainging game " + gameIndex);
-                    Console.WriteLine("Samples count: " + runSamplesCount);
-                    Console.WriteLine("Known positions count: " + _knownPositions.Count);
+                //if (currentLogIntervalIndex >= LOG_INTERVAL)
+                //{
+                //    Console.WriteLine("Starting trainging game " + gameIndex);
+                //    Console.WriteLine("Samples count: " + runSamplesCount);
+                //    Console.WriteLine("Known positions count: " + _knownPositions.Count);
 
-                    currentLogIntervalIndex = 0;
-                }
+                //    currentLogIntervalIndex = 0;
+                //}
 
                 List<Task<List<TrainingSample>>> selfPlayTasks = new List<Task<List<TrainingSample>>>();
                 for (int i = 0; i < THREADS_COUNT; i++)
@@ -222,80 +275,122 @@ namespace GomokuNN.Sources
                 currentLogIntervalIndex += THREADS_COUNT;
             }
 
+            selfPlayFinished = true;
             watch.Stop();
-            Console.WriteLine("Self-play time: " + watch.ElapsedMilliseconds / 1000.0);
+            progressTask.Wait(1000);
 
-            NetworkTrainer.Train(startingGeneration, startingGeneration + 1, ref _trainingSamples, 0.2f, BATCH_SIZE, EPOCHS);
+            AnsiConsole.MarkupLine("[red]Self-play time: {0}[/]", watch.ElapsedMilliseconds / 1000.0);
 
-            //_baseLines.Add(currentAgent);
+            if (_trainingSamples.Count > MAX_TRAINING_SAMPLES_COUNT)
+            {
+                AnsiConsole.MarkupLine("[steelblue] Max samples amount reached: {0}. Reducing samples count...[/]", _trainingSamples.Count);
 
-            //var newGenerationAgent = new GymParticipant()
-            //{
-            //    id = 10000,
-            //    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration + 1), 2500, 1.0f)
-            //};
+                int gamesCountToRemove = _trainingSamples.Count - MAX_TRAINING_SAMPLES_COUNT;
+                for (int i = 0; i < gamesCountToRemove; i++)
+                {
+                    _knownPositions.Remove(_trainingSamples[i].positionHash);
+                }
+                _trainingSamples.RemoveRange(0, gamesCountToRemove);
+            }
 
-            //Console.WriteLine("Starting estimation games for new network " + newGenerationAgent.agent.modelPath);
-            //int[] wonGamesCount = new int[_baseLines.Count];
-            //int[] losesGamesCount = new int[_baseLines.Count];
-            //const int GYM_GAMES_COUNT = 4;
-            //List<Task<int>> estimationPlayTasks = new List<Task<int>>();
-            //for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
-            //{
-            //    wonGamesCount[agentIndex] = 0;
-            //    for (int gameIndex = 0; gameIndex < GYM_GAMES_COUNT; gameIndex++)
-            //    {
-            //        bool newNetFirst = gameIndex % 2 == 0;
+            AnsiConsole.MarkupLine("[cyan1] Total samples: {0}[/]", _trainingSamples.Count);
 
-            //        var agent1 = newNetFirst ? newGenerationAgent : _baseLines[agentIndex];
-            //        var agent2 = newNetFirst ? _baseLines[agentIndex] : newGenerationAgent;
+            var trainingSamples = new List<TrainingSample>();
+            trainingSamples.AddRange(_trainingSamples.GetRange(0, _trainingSamples.Count));
+            NetworkTrainer.Shuffle(ref trainingSamples);
+            trainingSamples = trainingSamples.GetRange(0, Math.Min(trainingSamples.Count, TRAINING_SAMPLE_SIZE));
 
-            //        Console.WriteLine("Starting game estimation game " + gameIndex + " vs " + _baseLines[agentIndex].agent.modelPath);
-            //        estimationPlayTasks.Add(Task.Factory.StartNew(() =>
-            //        {
-            //            return EstimationPlay(agent1, agent2);
-            //        }));
-            //    }
-            //}
+            AnsiConsole.MarkupLine("[cyan1] Traingin with samples: {0}[/]", trainingSamples.Count);
+            NetworkTrainer.Train(startingGeneration, startingGeneration + 1, ref trainingSamples, 0.2f, BATCH_SIZE, EPOCHS);
 
-            //Task.WaitAll(estimationPlayTasks.ToArray());
-            //for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
-            //{
-            //    for (int gameIndex = 0; gameIndex < GYM_GAMES_COUNT; gameIndex++)
-            //    {
-            //        var gameResult = estimationPlayTasks[agentIndex * GYM_GAMES_COUNT + gameIndex].Result;
-            //        bool newNetFirst = gameIndex % 2 == 0;
-            //        if (gameResult == Constants.CROSS_COLOR && newNetFirst)
-            //        {
-            //            wonGamesCount[agentIndex]++;
-            //        }
+            if (PLAY_VS_BASELINES_ENABLED)
+            {
+                _baseLines.Add(new GymParticipant()
+                {
+                    id = 1000,
+                    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration), 400, 1.0f)
+                });
 
-            //        if (gameResult == Constants.CROSS_COLOR && !newNetFirst)
-            //        {
-            //            losesGamesCount[agentIndex]++;
-            //        }
+                var newGenerationAgent = new GymParticipant()
+                {
+                    id = 10000,
+                    agent = new GameAgentSettings(EstimatorType.CNN, CNNHelper.GetCNNPathByGeneration(startingGeneration + 1), 400, 1.0f)
+                };
 
-            //        if (gameResult == Constants.ZERO_COLOR && !newNetFirst)
-            //        {
-            //            wonGamesCount[agentIndex]++;
-            //        }
+                AnsiConsole.MarkupLine("[yellow] Starting estimation games for new network {0}[/]", newGenerationAgent.agent.modelPath);
+                int[] wonGamesCount = new int[_baseLines.Count];
+                int[] losesGamesCount = new int[_baseLines.Count];
+                const int GYM_GAMES_COUNT = 4;
+                List<Task<int>> estimationPlayTasks = new List<Task<int>>();
+                for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
+                {
+                    wonGamesCount[agentIndex] = 0;
+                    for (int evaluationGameIndex = 0; evaluationGameIndex < GYM_GAMES_COUNT; evaluationGameIndex++)
+                    {
+                        bool newNetFirst = evaluationGameIndex % 2 == 0;
 
-            //        if (gameResult == Constants.ZERO_COLOR && newNetFirst)
-            //        {
-            //            losesGamesCount[agentIndex]++;
-            //        }
-            //    }
-            //}
+                        var agent1 = newNetFirst ? newGenerationAgent : _baseLines[agentIndex];
+                        var agent2 = newNetFirst ? _baseLines[agentIndex] : newGenerationAgent;
 
-            //for (int i = 0; i < wonGamesCount.Length; i++)
-            //{
-            //    int draws = GYM_GAMES_COUNT - wonGamesCount[i] - losesGamesCount[i];
-            //    Console.WriteLine("Winrate against " + CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath) + ": " + wonGamesCount[i] + " " + losesGamesCount[i] + " " + draws);
-            //}
-            //_baseLines.RemoveAt(_baseLines.Count - 1);
+                        //AnsiConsole.MarkupLine("Starting game estimation game {0} vs {1}", evaluationGameIndex, _baseLines[agentIndex].agent.modelPath);
+                        estimationPlayTasks.Add(Task.Factory.StartNew(() =>
+                        {
+                            return EstimationPlay(agent1, agent2);
+                        }));
+                    }
+                }
+
+                Task.WaitAll(estimationPlayTasks.ToArray());
+                for (int agentIndex = 0; agentIndex < _baseLines.Count; agentIndex++)
+                {
+                    for (int evaluationGameIndex = 0; evaluationGameIndex < GYM_GAMES_COUNT; evaluationGameIndex++)
+                    {
+                        var gameResult = estimationPlayTasks[agentIndex * GYM_GAMES_COUNT + evaluationGameIndex].Result;
+                        bool newNetFirst = evaluationGameIndex % 2 == 0;
+                        if (gameResult == Constants.CROSS_COLOR && newNetFirst)
+                        {
+                            wonGamesCount[agentIndex]++;
+                        }
+
+                        if (gameResult == Constants.CROSS_COLOR && !newNetFirst)
+                        {
+                            losesGamesCount[agentIndex]++;
+                        }
+
+                        if (gameResult == Constants.ZERO_COLOR && !newNetFirst)
+                        {
+                            wonGamesCount[agentIndex]++;
+                        }
+
+                        if (gameResult == Constants.ZERO_COLOR && newNetFirst)
+                        {
+                            losesGamesCount[agentIndex]++;
+                        }
+                    }
+                }
+
+                for (int i = 0; i < wonGamesCount.Length; i++)
+                {
+                    int drawsGamesCount = GYM_GAMES_COUNT - wonGamesCount[i] - losesGamesCount[i];
+                    AnsiConsole.MarkupLine("Winrate against {0}: {1}-{2}-{3}", CNNHelper.GetCNNGeneration(_baseLines[i].agent.modelPath), wonGamesCount[i], losesGamesCount[i], drawsGamesCount);
+                }
+                _baseLines.RemoveAt(_baseLines.Count - 1);
+
+                float draws = GYM_GAMES_COUNT - wonGamesCount[0] - losesGamesCount[0];
+                if (((float)wonGamesCount[0] + draws) / GYM_GAMES_COUNT >= 0.51f)
+                {
+                    AnsiConsole.MarkupLine("[green]New generation created.[/]");
+                    return startingGeneration + 1;
+                }
+
+                AnsiConsole.MarkupLine("[red]Reverting to current generation...[/]");
+                return startingGeneration;
+            }
 
             //_knownPositions.Clear();
+            //_trainingSamples.Clear();
 
+            AnsiConsole.MarkupLine("[yellow]New generation created without estimation.[/]");
             return startingGeneration + 1;
         }
     }
